@@ -8,6 +8,10 @@
     "dev": "nodemon src/server.js",
     "test": "jest",
     "test:watch": "jest --watch",
+    "db:migrate": "node src/database/migrate.js up",
+    "db:rollback": "node src/database/migrate.js down",
+    "db:seed": "node src/database/seeders/locations.js",
+    "db:setup": "npm run db:migrate && npm run db:seed",
     "build": "echo 'No build step required for Node.js'",
     "vercel": "vercel"
   },
@@ -22,9 +26,12 @@
   "license": "MIT",
   "type": "commonjs",
   "dependencies": {
+    "@types/pg": "^8.15.4",
     "@vercel/node": "^2.3.0",
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
+    "db-migrate": "^0.11.14",
+    "db-migrate-pg": "^1.5.2",
     "dotenv": "^17.2.0",
     "express": "^4.18.2",
     "express-rate-limit": "^8.0.1",
@@ -32,6 +39,7 @@
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.1",
     "pg": "^8.16.3",
+    "pg-format": "^1.0.4",
     "postgis": "^1.0.5",
     "socket.io": "^4.8.1"
   },
