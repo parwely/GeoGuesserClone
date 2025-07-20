@@ -9,20 +9,26 @@ class Database {
 
   async connect() {
     try {
-      // Connection configuration
+      // Enhanced connection configuration for Neon
       const config = {
         connectionString: process.env.DATABASE_URL,
-        ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-        max: 10, // Maximum number of connections in pool
-        idleTimeoutMillis: 30000, // Close idle connections after 30 seconds
-        connectionTimeoutMillis: 10000, // Return error after 10 seconds if connection could not be established
+        ssl: process.env.DB_SSL === 'true' ? { 
+          rejectUnauthorized: false 
+        } : false,
+        max: 10,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 10000,
       };
+
+      console.log('🔍 Connecting to database...');
+      console.log('Host:', process.env.DB_HOST || 'from connection string');
+      console.log('SSL enabled:', config.ssl ? 'Yes' : 'No');
 
       this.pool = new Pool(config);
 
       // Test the connection
       const client = await this.pool.connect();
-      console.log('✅ Connected to Neon PostgreSQL database');
+      console.log('✅ Connected to PostgreSQL database');
       
       // Check PostgreSQL version
       const result = await client.query('SELECT version()');
@@ -34,6 +40,11 @@ class Database {
       return this.pool;
     } catch (error) {
       console.error('❌ Database connection error:', error.message);
+      console.error('🔍 Error details:', {
+        code: error.code,
+        host: error.hostname || process.env.DB_HOST,
+        port: error.port || process.env.DB_PORT
+      });
       throw error;
     }
   }
@@ -48,7 +59,7 @@ class Database {
 
   async query(text, params) {
     if (!this.connected) {
-      throw new Error('Database not connected');
+      await this.connect();
     }
     
     try {
@@ -56,7 +67,11 @@ class Database {
       const result = await this.pool.query(text, params);
       const duration = Date.now() - start;
       
-      console.log('🔍 Executed query:', { text, duration: `${duration}ms`, rows: result.rowCount });
+      console.log('🔍 Executed query:', { 
+        text: text.substring(0, 100) + (text.length > 100 ? '...' : ''), 
+        duration: `${duration}ms`, 
+        rows: result.rowCount 
+      });
       return result;
     } catch (error) {
       console.error('❌ Query error:', error.message);
@@ -66,7 +81,7 @@ class Database {
 
   async getClient() {
     if (!this.connected) {
-      throw new Error('Database not connected');
+      await this.connect();
     }
     return await this.pool.connect();
   }

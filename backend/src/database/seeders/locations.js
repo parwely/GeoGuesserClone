@@ -62,6 +62,7 @@ async function seedLocations() {
   try {
     console.log('🌍 Seeding sample locations...');
     
+    // Connect to database
     await database.connect();
     
     // Clear existing sample data

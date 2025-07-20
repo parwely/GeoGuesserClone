@@ -40,6 +40,7 @@ class MigrationRunner {
     try {
       console.log('🚀 Starting database migrations...');
       
+      // Connect to database first
       await database.connect();
       await this.createMigrationsTable();
       
@@ -58,7 +59,8 @@ class MigrationRunner {
           const migrationPath = path.join(this.migrationsPath, file);
           const migration = require(migrationPath);
           
-          await migration.up();
+          // Pass database instance to migration
+          await migration.up(database);
           
           await database.query(
             'INSERT INTO schema_migrations (migration_name) VALUES ($1)',
@@ -98,7 +100,7 @@ class MigrationRunner {
       const migrationPath = path.join(this.migrationsPath, `${migrationName}.js`);
       const migration = require(migrationPath);
       
-      await migration.down();
+      await migration.down(database);
       
       await database.query(
         'DELETE FROM schema_migrations WHERE migration_name = $1',
