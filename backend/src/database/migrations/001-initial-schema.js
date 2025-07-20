@@ -1,6 +1,4 @@
-const database = require('../connection');
-
-async function up() {
+async function up(database) {
   const client = await database.getClient();
   
   try {
@@ -93,7 +91,7 @@ async function up() {
   }
 }
 
-async function down() {
+async function down(database) {
   const client = await database.getClient();
   
   try {
