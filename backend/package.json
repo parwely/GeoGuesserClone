@@ -6,14 +6,21 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "test": "jest",
-    "test:watch": "jest --watch",
     "db:migrate": "node src/database/migrate.js up",
     "db:rollback": "node src/database/migrate.js down",
     "db:seed": "node src/database/seeders/locations.js",
     "db:setup": "npm run db:migrate && npm run db:seed",
     "build": "echo 'No build step required for Node.js'",
-    "vercel": "vercel"
+    "vercel": "vercel",
+    "test": "jest --detectOpenHandles --forceExit",
+    "test:watch": "jest --watch --detectOpenHandles"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "setupFilesAfterEnv": [
+      "<rootDir>/tests/setup.js"
+    ],
+    "testTimeout": 30000
   },
   "keywords": [
     "geoguessr",
@@ -28,6 +35,7 @@
   "dependencies": {
     "@types/pg": "^8.15.4",
     "@vercel/node": "^2.3.0",
+    "axios": "^1.10.0",
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
     "db-migrate": "^0.11.14",
@@ -44,6 +52,8 @@
     "socket.io": "^4.8.1"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^24.0.15",
     "jest": "^30.0.4",
     "nodemon": "^3.1.10",
