@@ -2,8 +2,10 @@ package com.example.geogeusserclone
 
 import com.example.geogeusserclone.data.database.AppDatabase
 import com.example.geogeusserclone.data.network.ApiService
-import com.example.geogeusserclone.data.repositories.AuthRepository
+import com.example.geogeusserclone.data.network.AuthInterceptor
 import com.example.geogeusserclone.data.repositories.GameRepository
+import com.example.geogeusserclone.data.repositories.LocationRepository
+import com.example.geogeusserclone.data.repositories.UserRepository
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -16,11 +18,12 @@ object RepositoryModule {
 
     @Provides
     @Singleton
-    fun provideAuthRepository(
+    fun provideUserRepository(
         apiService: ApiService,
-        database: AppDatabase
-    ): AuthRepository {
-        return AuthRepository(apiService, database.userDao())
+        database: AppDatabase,
+        authInterceptor: AuthInterceptor
+    ): UserRepository {
+        return UserRepository(apiService, database.userDao(), authInterceptor)
     }
 
     @Provides
@@ -29,6 +32,15 @@ object RepositoryModule {
         apiService: ApiService,
         database: AppDatabase
     ): GameRepository {
-        return GameRepository(apiService, database.gameDao())
+        return GameRepository(apiService, database.gameDao(), database.guessDao())
+    }
+
+    @Provides
+    @Singleton
+    fun provideLocationRepository(
+        apiService: ApiService,
+        database: AppDatabase
+    ): LocationRepository {
+        return LocationRepository(apiService, database.locationDao())
     }
 }
