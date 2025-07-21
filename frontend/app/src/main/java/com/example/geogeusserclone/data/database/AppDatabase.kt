@@ -12,7 +12,7 @@ import com.example.geogeusserclone.data.database.entities.*
         LocationEntity::class,
         GuessEntity::class
     ],
-    version = 1,
+    version = 2, // Version erhöht wegen Index-Änderungen
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

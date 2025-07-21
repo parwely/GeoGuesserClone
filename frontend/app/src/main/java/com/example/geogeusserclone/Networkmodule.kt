@@ -1,6 +1,7 @@
 package com.example.geogeusserclone
 
 import android.content.Context
+import com.example.geoguessrclone.BuildConfig // Korrigierter Import ohne "s"
 import com.example.geogeusserclone.data.network.ApiService
 import com.example.geogeusserclone.data.network.AuthInterceptor
 import dagger.Module
@@ -13,7 +14,6 @@ import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
-import java.util.concurrent.TimeUnit
 import javax.inject.Singleton
 
 @Module
@@ -42,13 +42,9 @@ object NetworkModule {
         }
 
         return OkHttpClient.Builder()
-            .cache(cache)
-            .addInterceptor(loggingInterceptor)
             .addInterceptor(authInterceptor)
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
-            .writeTimeout(30, TimeUnit.SECONDS)
-            .retryOnConnectionFailure(true)
+            .addInterceptor(loggingInterceptor)
+            .cache(cache)
             .build()
     }
 

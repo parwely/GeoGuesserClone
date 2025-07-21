@@ -1,8 +1,9 @@
 package com.example.geogeusserclone.data.database.entities
 
 import androidx.room.Entity
-import androidx.room.PrimaryKey
 import androidx.room.ForeignKey
+import androidx.room.Index
+import androidx.room.PrimaryKey
 
 @Entity(
     tableName = "guesses",
@@ -12,7 +13,18 @@ import androidx.room.ForeignKey
             parentColumns = ["id"],
             childColumns = ["gameId"],
             onDelete = ForeignKey.CASCADE
+        ),
+        ForeignKey(
+            entity = LocationEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["locationId"],
+            onDelete = ForeignKey.CASCADE
         )
+    ],
+    indices = [
+        Index(value = ["gameId"]),
+        Index(value = ["locationId"]),
+        Index(value = ["timestamp"])
     ]
 )
 data class GuessEntity(
