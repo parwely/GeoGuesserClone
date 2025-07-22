@@ -12,77 +12,84 @@ import javax.inject.Singleton
 class LocationRepository @Inject constructor(
     private val apiService: ApiService,
     private val locationDao: LocationDao
-) {
-
-    fun getCachedLocations(): Flow<List<LocationEntity>> = locationDao.getCachedLocations()
+) : BaseRepository() {
 
     suspend fun getRandomLocation(): Result<LocationEntity> {
         return try {
-            // Try to get from server first
+            // Try to get from API first
             val response = apiService.getRandomLocation()
-
             if (response.isSuccessful) {
                 val locationResponse = response.body()!!
                 val location = LocationEntity(
                     id = locationResponse.id,
+                    imageUrl = locationResponse.imageUrl,
                     latitude = locationResponse.latitude,
                     longitude = locationResponse.longitude,
-                    imageUrl = locationResponse.imageUrl,
-                    isCached = false
+                    country = locationResponse.country,
+                    city = locationResponse.city,
+                    difficulty = locationResponse.difficulty,
+                    isUsed = false
                 )
 
-                // Cache the location
                 locationDao.insertLocation(location)
                 Result.success(location)
-
             } else {
-                // Fallback to cached locations
-                getFallbackLocation()
+                // Fallback to local unused location
+                getLocalUnusedLocation()
             }
-
         } catch (e: Exception) {
-            // Network error - use cached location
-            getFallbackLocation()
+            // Fallback to local unused location
+            getLocalUnusedLocation()
         }
     }
 
-    private suspend fun getFallbackLocation(): Result<LocationEntity> {
-        val cachedLocations = locationDao.getRandomLocations(1)
-
-        return if (cachedLocations.isNotEmpty()) {
-            Result.success(cachedLocations.first())
+    private suspend fun getLocalUnusedLocation(): Result<LocationEntity> {
+        val location = locationDao.getRandomUnusedLocation()
+        return if (location != null) {
+            Result.success(location)
         } else {
-            // Last resort - create a default location
-            val defaultLocation = LocationEntity(
+            // Create fallback location if none available
+            val fallbackLocation = LocationEntity(
                 id = UUID.randomUUID().toString(),
-                latitude = 40.7589, // Times Square, NYC
-                longitude = -73.9851,
-                imageUrl = "",
-                country = "United States",
-                city = "New York",
-                difficulty = 3,
-                isCached = true
+                imageUrl = "file:///android_asset/fallback_location.jpg",
+                latitude = 48.8566,
+                longitude = 2.3522,
+                country = "France",
+                city = "Paris",
+                difficulty = 2,
+                isUsed = false
             )
-            locationDao.insertLocation(defaultLocation)
-            Result.success(defaultLocation)
+            locationDao.insertLocation(fallbackLocation)
+            Result.success(fallbackLocation)
         }
     }
 
-    suspend fun cacheLocationForOffline(location: LocationEntity) {
-        val cachedLocation = location.copy(isCached = true)
-        locationDao.insertLocation(cachedLocation)
+    suspend fun markLocationAsUsed(locationId: String) {
+        locationDao.markLocationAsUsed(locationId)
     }
 
-    suspend fun preloadLocations(locations: List<LocationEntity>) {
-        val cachedLocations = locations.map { it.copy(isCached = true) }
-        locationDao.insertLocations(cachedLocations)
+    suspend fun preloadLocations(count: Int = 20) {
+        try {
+            val response = apiService.getLocationsBatch(count)
+            if (response.isSuccessful) {
+                val locations = response.body()!!.locations.map { locationResponse ->
+                    LocationEntity(
+                        id = locationResponse.id,
+                        imageUrl = locationResponse.imageUrl,
+                        latitude = locationResponse.latitude,
+                        longitude = locationResponse.longitude,
+                        country = locationResponse.country,
+                        city = locationResponse.city,
+                        difficulty = locationResponse.difficulty,
+                        isUsed = false
+                    )
+                }
+                locationDao.insertLocations(locations)
+            }
+        } catch (e: Exception) {
+            // Silently fail - fallback will be used
+        }
     }
 
-    suspend fun getCachedLocationCount(): Int = locationDao.getCachedLocationCount()
-
-    suspend fun getLocationById(locationId: String): LocationEntity? = locationDao.getLocationById(locationId)
-
-    suspend fun clearNonCachedLocations() {
-        locationDao.deleteNonCachedLocations()
-    }
+    fun getAllLocations(): Flow<List<LocationEntity>> = locationDao.getAllLocations()
 }

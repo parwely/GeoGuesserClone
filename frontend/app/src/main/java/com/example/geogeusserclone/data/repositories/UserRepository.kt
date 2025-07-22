@@ -7,6 +7,7 @@ import com.example.geogeusserclone.data.network.AuthInterceptor
 import com.example.geogeusserclone.data.network.LoginRequest
 import com.example.geogeusserclone.data.network.RegisterRequest
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -15,34 +16,34 @@ class UserRepository @Inject constructor(
     private val apiService: ApiService,
     private val userDao: UserDao,
     private val authInterceptor: AuthInterceptor
-) {
+) : BaseRepository() {
 
-    fun getCurrentUserFlow(): Flow<UserEntity?> = userDao.getCurrentUserFlow()
+    fun getCurrentUserFlow(): Flow<UserEntity?> = userDao.getCurrentUser()
 
-    suspend fun getCurrentUser(): UserEntity? = userDao.getCurrentUser()
+    suspend fun getCurrentUser(): UserEntity? = userDao.getCurrentUserSync()
 
     suspend fun login(email: String, password: String): Result<UserEntity> {
         return try {
             val response = apiService.login(LoginRequest(email, password))
             if (response.isSuccessful) {
                 val authResponse = response.body()!!
+
+                // Set tokens in AuthInterceptor
+                authInterceptor.setToken(authResponse.token)
+                authInterceptor.setRefreshToken(authResponse.refreshToken)
+
                 val user = UserEntity(
                     id = authResponse.user.id,
                     username = authResponse.user.username,
                     email = authResponse.user.email,
                     authToken = authResponse.token,
-                    lastLoginAt = System.currentTimeMillis()
+                    refreshToken = authResponse.refreshToken
                 )
 
-                // Set token for future requests
-                authInterceptor.setToken(authResponse.token)
-
-                // Cache user locally
                 userDao.insertUser(user)
-
                 Result.success(user)
             } else {
-                Result.failure(Exception("Login failed: ${response.message()}"))
+                Result.failure(Exception("Login fehlgeschlagen"))
             }
         } catch (e: Exception) {
             Result.failure(e)
@@ -54,21 +55,22 @@ class UserRepository @Inject constructor(
             val response = apiService.register(RegisterRequest(username, email, password))
             if (response.isSuccessful) {
                 val authResponse = response.body()!!
+
+                authInterceptor.setToken(authResponse.token)
+                authInterceptor.setRefreshToken(authResponse.refreshToken)
+
                 val user = UserEntity(
                     id = authResponse.user.id,
                     username = authResponse.user.username,
                     email = authResponse.user.email,
                     authToken = authResponse.token,
-                    createdAt = System.currentTimeMillis(),
-                    lastLoginAt = System.currentTimeMillis()
+                    refreshToken = authResponse.refreshToken
                 )
 
-                authInterceptor.setToken(authResponse.token)
                 userDao.insertUser(user)
-
                 Result.success(user)
             } else {
-                Result.failure(Exception("Registration failed: ${response.message()}"))
+                Result.failure(Exception("Registrierung fehlgeschlagen"))
             }
         } catch (e: Exception) {
             Result.failure(e)
@@ -76,28 +78,38 @@ class UserRepository @Inject constructor(
     }
 
     suspend fun logout() {
-        val user = getCurrentUser()
-        user?.let {
-            userDao.updateAuthToken(it.id, null, System.currentTimeMillis())
+        try {
+            apiService.logout()
+        } catch (e: Exception) {
+            // Continue with local logout even if API call fails
         }
-        authInterceptor.setToken(null)
+
+        authInterceptor.clearTokens()
+        userDao.clearCurrentUser()
     }
 
-    suspend fun updateUserStats(userId: String, totalScore: Int, gamesPlayed: Int, bestScore: Int) {
-        userDao.updateUserStats(userId, totalScore, gamesPlayed, bestScore)
-    }
-
-    suspend fun refreshUserToken(): Result<String> {
+    suspend fun refreshToken(): String? {
         return try {
             val currentUser = getCurrentUser()
-            if (currentUser?.authToken != null) {
-                // Implement refresh token logic here if your backend supports it
-                Result.success(currentUser.authToken)
-            } else {
-                Result.failure(Exception("No valid token to refresh"))
+            currentUser?.refreshToken?.let { refreshToken ->
+                val response = apiService.refreshToken(RefreshTokenRequest(refreshToken))
+                if (response.isSuccessful) {
+                    val authResponse = response.body()!!
+
+                    authInterceptor.setToken(authResponse.token)
+                    authInterceptor.setRefreshToken(authResponse.refreshToken)
+
+                    val updatedUser = currentUser.copy(
+                        authToken = authResponse.token,
+                        refreshToken = authResponse.refreshToken
+                    )
+                    userDao.insertUser(updatedUser)
+
+                    authResponse.token
+                } else null
             }
         } catch (e: Exception) {
-            Result.failure(e)
+            null
         }
     }
 }

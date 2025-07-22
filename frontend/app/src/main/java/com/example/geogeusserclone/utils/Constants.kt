@@ -1,11 +1,31 @@
 package com.example.geogeusserclone.utils
 
 object Constants {
-    const val DEFAULT_GAME_ROUNDS = 5
-    const val MAX_SCORE_PER_ROUND = 5000
+    // Game Modes
     const val GAME_MODE_SINGLE = "SINGLE"
     const val GAME_MODE_MULTIPLAYER = "MULTIPLAYER"
     const val GAME_MODE_BATTLE_ROYALE = "BATTLE_ROYALE"
+
+    // Game Settings
+    const val DEFAULT_GAME_ROUNDS = 5
+    const val MAX_ROUND_TIME_MS = 60000L // 60 seconds
+    const val MIN_ROUND_TIME_MS = 10000L // 10 seconds
+
+    // Scoring
+    const val MAX_SCORE_PER_ROUND = 5000
+    const val PERFECT_GUESS_DISTANCE_KM = 1.0
+
+    // Map Settings
+    const val DEFAULT_ZOOM_LEVEL = 2.0
+    const val GUESS_ZOOM_LEVEL = 10.0
+    const val MIN_ZOOM_LEVEL = 1.0
+    const val MAX_ZOOM_LEVEL = 18.0
+
+    // Preferences Keys
+    const val PREF_USER_ID = "user_id"
+    const val PREF_AUTH_TOKEN = "auth_token"
+    const val PREF_SOUND_ENABLED = "sound_enabled"
+    const val PREF_VIBRATION_ENABLED = "vibration_enabled"
 
     // Distance thresholds for scoring
     const val PERFECT_DISTANCE_KM = 1.0
