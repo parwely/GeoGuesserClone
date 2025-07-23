@@ -9,6 +9,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.geogeusserclone.ui.components.*
 import com.example.geogeusserclone.ui.theme.GeoGeusserCloneTheme
 import com.example.geogeusserclone.viewmodels.GameViewModel
 import dagger.hilt.android.AndroidEntryPoint
@@ -29,63 +30,122 @@ class GameActivity : ComponentActivity() {
 fun GameScreen(
     viewModel: GameViewModel = hiltViewModel()
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
-        // Score Display
-        Card(
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                text = "Score: 0",
-                modifier = Modifier.padding(16.dp)
+    val state by viewModel.state.collectAsState()
+
+    LaunchedEffect(Unit) {
+        if (state.currentGame == null) {
+            viewModel.createNewGame()
+        }
+    }
+
+    when {
+        state.isLoading -> {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = androidx.compose.ui.Alignment.Center
+            ) {
+                CircularProgressIndicator()
+            }
+        }
+
+        state.gameCompleted -> {
+            GameCompletionScreen(
+                game = state.currentGame!!,
+                guesses = state.currentGuesses,
+                onPlayAgain = { viewModel.createNewGame() },
+                onMainMenu = { /* Navigate to main menu */ }
             )
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        state.showingResults && state.lastGuessResult != null -> {
+            RoundResultView(
+                guess = state.lastGuessResult!!,
+                onNextRound = { viewModel.proceedToNextRound() },
+                onShowMap = { /* Show result map */ },
+                isLastRound = state.currentGame?.let {
+                    it.currentRound >= it.totalRounds
+                } ?: false
+            )
+        }
 
-        // Street View Placeholder
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-        ) {
-            Box(
+        state.isMapVisible -> {
+            GuessMapView(
+                onGuessSelected = { lat, lng ->
+                    viewModel.submitGuess(lat, lng)
+                    viewModel.hideMap()
+                },
+                onMapClose = { viewModel.hideMap() }
+            )
+        }
+
+        else -> {
+            Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(16.dp)
             ) {
-                Text("Street View Image Here")
+                // Game Progress
+                state.currentGame?.let { game ->
+                    GameProgressCard(
+                        currentRound = game.currentRound,
+                        totalRounds = game.totalRounds,
+                        score = game.score
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Location Image
+                LocationImageView(
+                    location = state.currentLocation,
+                    timeRemaining = state.timeRemaining,
+                    onMapClick = { viewModel.showMap() },
+                    modifier = Modifier.weight(1f)
+                )
+
+                state.error?.let { error ->
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer
+                        )
+                    ) {
+                        Text(
+                            text = error,
+                            modifier = Modifier.padding(16.dp),
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+                }
             }
         }
+    }
+}
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Map Placeholder
-        Card(
+@Composable
+fun GameProgressCard(
+    currentRound: Int,
+    totalRounds: Int,
+    score: Int,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(200.dp)
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp)
-            ) {
-                Text("Interactive Map Here")
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Guess Button
-        Button(
-            onClick = { /* Submit guess */ },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Submit Guess")
+            Text(
+                text = "Round $currentRound/$totalRounds",
+                style = MaterialTheme.typography.titleMedium
+            )
+            Text(
+                text = "Score: $score",
+                style = MaterialTheme.typography.titleMedium
+            )
         }
     }
 }
