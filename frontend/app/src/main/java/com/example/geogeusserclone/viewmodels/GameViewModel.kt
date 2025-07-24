@@ -9,8 +9,10 @@ import com.example.geogeusserclone.data.repositories.LocationRepository
 import com.example.geogeusserclone.data.repositories.UserRepository
 import com.example.geogeusserclone.utils.Constants
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.time.delay
 import javax.inject.Inject
 
 data class GameState(
@@ -156,6 +158,9 @@ class GameViewModel @Inject constructor(
             setState(state.value.copy(gameCompleted = true))
         } else {
             loadNextLocation()
+            setState(state.value.copy(
+                currentGame = game?.copy(currentRound = game.currentRound + 1)
+            ))
         }
     }
 
@@ -175,26 +180,21 @@ class GameViewModel @Inject constructor(
         }
     }
 
-    private fun startRoundTimer(duration: Long = 60000L) { // 60 seconds
+    private fun startRoundTimer(duration: Long = 60000L) {
         gameTimer?.cancel()
         gameTimer = viewModelScope.launch {
-            var timeLeft = duration
-            while (timeLeft > 0 && !state.value.isGuessSubmitted) {
-                setState(state.value.copy(timeRemaining = timeLeft))
-                kotlinx.coroutines.delay(1000L)
-                timeLeft -= 1000L
+            var timeRemaining = duration
+            while (timeRemaining > 0) {
+                delay(1000L)
+                timeRemaining -= 1000L
+                setState(state.value.copy(timeRemaining = timeRemaining))
             }
-
-            if (!state.value.isGuessSubmitted) {
-                // Time's up - submit default guess (center of map)
-                submitGuess(0.0, 0.0)
-            }
+            submitGuess(0.0, 0.0) // Automatische Abgabe bei Zeitablauf
         }
     }
 
     private fun stopRoundTimer() {
         gameTimer?.cancel()
-        setState(state.value.copy(timeRemaining = 0L))
     }
 
     fun clearError() {
