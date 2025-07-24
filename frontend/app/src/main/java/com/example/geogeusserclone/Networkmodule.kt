@@ -1,9 +1,9 @@
 package com.example.geogeusserclone
 
 import android.content.Context
-import com.example.geoguessrclone.BuildConfig // Korrigierter Import ohne "s"
 import com.example.geogeusserclone.data.network.ApiService
 import com.example.geogeusserclone.data.network.AuthInterceptor
+import com.example.geogeusserclone.utils.Constants
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -34,11 +34,7 @@ object NetworkModule {
         cache: Cache
     ): OkHttpClient {
         val loggingInterceptor = HttpLoggingInterceptor().apply {
-            level = if (BuildConfig.DEBUG) {
-                HttpLoggingInterceptor.Level.BODY
-            } else {
-                HttpLoggingInterceptor.Level.NONE
-            }
+            level = HttpLoggingInterceptor.Level.BODY // Always use BODY for debug
         }
 
         return OkHttpClient.Builder()
@@ -52,7 +48,7 @@ object NetworkModule {
     @Singleton
     fun provideRetrofit(okHttpClient: OkHttpClient): Retrofit {
         return Retrofit.Builder()
-            .baseUrl(BuildConfig.BASE_URL)
+            .baseUrl(Constants.BASE_URL) // Directly use Constants.BASE_URL
             .client(okHttpClient)
             .addConverterFactory(GsonConverterFactory.create())
             .build()

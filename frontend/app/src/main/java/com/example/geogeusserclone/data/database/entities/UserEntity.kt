@@ -8,7 +8,11 @@ data class UserEntity(
     @PrimaryKey val id: String,
     val username: String,
     val email: String,
-    val authToken: String?,
+    val authToken: String? = null,
     val refreshToken: String? = null,
+    val totalScore: Int = 0,
+    val gamesPlayed: Int = 0,
+    val bestScore: Int = 0,
+    val lastLoginAt: Long = System.currentTimeMillis(),
     val createdAt: Long = System.currentTimeMillis()
 )

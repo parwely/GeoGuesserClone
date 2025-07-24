@@ -4,90 +4,119 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.geogeusserclone.ui.theme.GeoGeusserCloneTheme
+import com.example.geogeusserclone.viewmodels.AuthViewModel
+import com.example.geogeusserclone.utils.Constants
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
 class MenuActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         setContent {
             GeoGeusserCloneTheme {
-                MainMenuScreen(
-                    onPlayClicked = { startActivity(Intent(this, GameActivity::class.java)) },
-                    onStatsClicked = { startActivity(Intent(this, StatsActivity::class.java)) },
-                    onSettingsClicked = { /* Settings */ }
+                MenuScreen(
+                    onNavigateToGame = {
+                        startActivity(Intent(this, GameActivity::class.java))
+                    },
+                    onNavigateToAuth = {
+                        startActivity(Intent(this, AuthActivity::class.java))
+                        finish()
+                    }
                 )
             }
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainMenuScreen(
-    onPlayClicked: () -> Unit,
-    onStatsClicked: () -> Unit,
-    onSettingsClicked: () -> Unit
+fun MenuScreen(
+    onNavigateToGame: () -> Unit,
+    onNavigateToAuth: () -> Unit,
+    authViewModel: AuthViewModel = hiltViewModel()
 ) {
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("GeoGuessr Clone", fontWeight = FontWeight.Bold) }
-            )
+    val authState by authViewModel.state.collectAsState()
+
+    LaunchedEffect(authState.isLoggedIn) {
+        if (!authState.isLoggedIn) {
+            onNavigateToAuth()
         }
-    ) { paddingValues ->
+    }
+
+    Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
+                .padding(innerPadding)
                 .padding(32.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
             Text(
                 text = "🌍",
-                fontSize = 72.sp,
-                modifier = Modifier.padding(bottom = 32.dp)
+                style = MaterialTheme.typography.displayLarge
             )
 
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text(
+                text = "GeoGuessr Clone",
+                style = MaterialTheme.typography.headlineLarge
+            )
+
+            authState.currentUser?.let { user ->
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Willkommen, ${user.username}!",
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+
+            Spacer(modifier = Modifier.height(48.dp))
+
             Button(
-                onClick = onPlayClicked,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)
+                onClick = onNavigateToGame,
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Start Game", fontSize = 18.sp)
+                Text("Einzelspieler")
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
             OutlinedButton(
-                onClick = onStatsClicked,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)
+                onClick = { /* TODO: Mehrspieler */ },
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Statistics", fontSize = 18.sp)
+                Text("Mehrspieler")
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
             OutlinedButton(
-                onClick = onSettingsClicked,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)
+                onClick = { /* TODO: Battle Royale */ },
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Settings", fontSize = 18.sp)
+                Text("Battle Royale")
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            TextButton(
+                onClick = {
+                    authViewModel.logout()
+                    onNavigateToAuth()
+                }
+            ) {
+                Text("Abmelden")
             }
         }
     }

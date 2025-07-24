@@ -13,5 +13,6 @@ data class LocationEntity(
     val city: String? = null,
     val difficulty: Int = 1, // 1-5 scale
     val isCached: Boolean = false,
+    val isUsed: Boolean = false, // Hinzugefügt
     val localImagePath: String? = null
 )

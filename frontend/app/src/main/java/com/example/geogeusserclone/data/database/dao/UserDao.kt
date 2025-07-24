@@ -36,4 +36,10 @@ interface UserDao {
 
     @Query("DELETE FROM users WHERE authToken IS NULL")
     suspend fun deleteLoggedOutUsers()
+
+    @Query("SELECT * FROM users WHERE authToken IS NOT NULL LIMIT 1")
+    suspend fun getCurrentUserSync(): UserEntity?
+
+    @Query("UPDATE users SET authToken = NULL, refreshToken = NULL WHERE authToken IS NOT NULL")
+    suspend fun clearCurrentUser()
 }

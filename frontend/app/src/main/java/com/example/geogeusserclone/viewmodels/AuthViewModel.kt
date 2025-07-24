@@ -4,16 +4,14 @@ import androidx.lifecycle.viewModelScope
 import com.example.geogeusserclone.data.database.entities.UserEntity
 import com.example.geogeusserclone.data.repositories.UserRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class AuthState(
     val isLoading: Boolean = false,
-    val currentUser: UserEntity? = null,
     val isLoggedIn: Boolean = false,
-    val error: String? = null,
-    val isRegistering: Boolean = false
+    val currentUser: UserEntity? = null,
+    val error: String? = null
 )
 
 @HiltViewModel
@@ -22,12 +20,12 @@ class AuthViewModel @Inject constructor(
 ) : BaseViewModel<AuthState>(AuthState()) {
 
     init {
-        checkCurrentUser()
+        checkAuthStatus()
     }
 
-    private fun checkCurrentUser() {
+    private fun checkAuthStatus() {
         viewModelScope.launch {
-            userRepository.getCurrentUserFlow().collectLatest { user ->
+            userRepository.getCurrentUserFlow().collect { user ->
                 setState(state.value.copy(
                     currentUser = user,
                     isLoggedIn = user != null
@@ -37,11 +35,6 @@ class AuthViewModel @Inject constructor(
     }
 
     fun login(email: String, password: String) {
-        if (email.isBlank() || password.isBlank()) {
-            setState(state.value.copy(error = "Email und Passwort sind erforderlich"))
-            return
-        }
-
         viewModelScope.launch {
             setState(state.value.copy(isLoading = true, error = null))
 
@@ -49,8 +42,8 @@ class AuthViewModel @Inject constructor(
                 .onSuccess { user ->
                     setState(state.value.copy(
                         isLoading = false,
-                        currentUser = user,
                         isLoggedIn = true,
+                        currentUser = user,
                         error = null
                     ))
                 }
@@ -64,28 +57,21 @@ class AuthViewModel @Inject constructor(
     }
 
     fun register(username: String, email: String, password: String) {
-        if (username.isBlank() || email.isBlank() || password.isBlank()) {
-            setState(state.value.copy(error = "Alle Felder sind erforderlich"))
-            return
-        }
-
         viewModelScope.launch {
-            setState(state.value.copy(isLoading = true, isRegistering = true, error = null))
+            setState(state.value.copy(isLoading = true, error = null))
 
             userRepository.register(username, email, password)
                 .onSuccess { user ->
                     setState(state.value.copy(
                         isLoading = false,
-                        isRegistering = false,
-                        currentUser = user,
                         isLoggedIn = true,
+                        currentUser = user,
                         error = null
                     ))
                 }
                 .onFailure { exception ->
                     setState(state.value.copy(
                         isLoading = false,
-                        isRegistering = false,
                         error = exception.message ?: "Registrierung fehlgeschlagen"
                     ))
                 }
@@ -96,8 +82,8 @@ class AuthViewModel @Inject constructor(
         viewModelScope.launch {
             userRepository.logout()
             setState(state.value.copy(
-                currentUser = null,
                 isLoggedIn = false,
+                currentUser = null,
                 error = null
             ))
         }
@@ -105,12 +91,5 @@ class AuthViewModel @Inject constructor(
 
     fun clearError() {
         setState(state.value.copy(error = null))
-    }
-
-    fun toggleAuthMode() {
-        setState(state.value.copy(
-            isRegistering = !state.value.isRegistering,
-            error = null
-        ))
     }
 }

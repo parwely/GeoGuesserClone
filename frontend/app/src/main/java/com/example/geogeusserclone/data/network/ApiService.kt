@@ -62,8 +62,20 @@ interface ApiService {
     @GET("api/locations/batch")
     suspend fun getLocationsBatch(@Query("count") count: Int = 10): Response<LocationBatchResponse>
 
+    @GET("api/locations")
+    suspend fun getLocations(@Query("count") count: Int = 50): Response<LocationBatchResponse>
+
     @POST("api/locations/{locationId}/report")
     suspend fun reportLocation(@Path("locationId") locationId: String, @Body report: LocationReportRequest): Response<Unit>
+
+
+    @PUT("users/{userId}/stats")
+    suspend fun updateUserStats(
+        @Path("userId") userId: String,
+        @Query("totalScore") totalScore: Int,
+        @Query("gamesPlayed") gamesPlayed: Int,
+        @Query("bestScore") bestScore: Int
+    ): Response<Unit>
 }
 
 // Request Data Classes
@@ -83,15 +95,6 @@ data class AuthResponse(
     val expiresIn: Long
 )
 
-data class LocationResponse(
-    val id: String,
-    val imageUrl: String,
-    val latitude: Double,
-    val longitude: Double,
-    val country: String?,
-    val city: String?,
-    val difficulty: Int
-)
 
 data class GameResponse(
     val id: String,
@@ -170,3 +173,4 @@ data class BattleRoyalePlayer(
     val isEliminated: Boolean,
     val rank: Int?
 )
+

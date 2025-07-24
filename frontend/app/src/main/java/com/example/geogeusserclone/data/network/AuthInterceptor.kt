@@ -47,6 +47,10 @@ class AuthInterceptor @Inject constructor() : Interceptor {
         return response
     }
 
+    fun setAuthToken(token: String?) {
+        this.authToken = token
+    }
+
     fun setToken(token: String?) {
         this.authToken = token
     }
@@ -64,5 +68,9 @@ class AuthInterceptor @Inject constructor() : Interceptor {
         authToken = null
         refreshToken = null
         tokenRefreshCallback = null
+    }
+
+    fun clearAuthToken() {
+        authToken = null
     }
 }

@@ -19,6 +19,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.GeoGeusserClone"
         android:usesCleartextTraffic="true">
+
         <activity
             android:name="com.example.geogeusserclone.ui.activities.MainActivity"
             android:exported="true"
@@ -29,5 +30,21 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name="com.example.geogeusserclone.ui.activities.AuthActivity"
+            android:exported="false"
+            android:theme="@style/Theme.GeoGeusserClone" />
+
+        <activity
+            android:name="com.example.geogeusserclone.ui.activities.MenuActivity"
+            android:exported="false"
+            android:theme="@style/Theme.GeoGeusserClone" />
+
+        <activity
+            android:name="com.example.geogeusserclone.ui.activities.GameActivity"
+            android:exported="false"
+            android:theme="@style/Theme.GeoGeusserClone" />
+
     </application>
 </manifest>
