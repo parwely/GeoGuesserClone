@@ -7,6 +7,8 @@ import com.example.geogeusserclone.data.database.entities.GuessEntity
 import com.example.geogeusserclone.data.network.ApiService
 import com.example.geogeusserclone.data.network.CreateGameRequest
 import com.example.geogeusserclone.data.network.GuessRequest
+import com.example.geogeusserclone.utils.DistanceCalculator
+import com.example.geogeusserclone.utils.ScoreCalculator
 import kotlinx.coroutines.flow.Flow
 import java.util.UUID
 import javax.inject.Inject
@@ -192,28 +194,12 @@ class GameRepository @Inject constructor(
 
     fun getGuessesByGame(gameId: String): Flow<List<GuessEntity>> = guessDao.getGuessesByGame(gameId)
 
-    // Utility functions
-    private fun calculateDistance(lat1: Double, lng1: Double, lat2: Double, lng2: Double): Double {
-        val earthRadius = 6371.0 // km
-        val dLat = Math.toRadians(lat2 - lat1)
-        val dLng = Math.toRadians(lng2 - lng1)
-        val a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) *
-                Math.sin(dLng / 2) * Math.sin(dLng / 2)
-        val c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-        return earthRadius * c
+    private fun calculateScore(distance: Double, timeSpentMs: Long = 0L): Int {
+        return ScoreCalculator.calculateScore(distance, timeSpentMs)
     }
 
-    private fun calculateScore(distance: Double): Int {
-        return when {
-            distance <= 1.0 -> 5000
-            distance <= 10.0 -> 4000
-            distance <= 50.0 -> 3000
-            distance <= 100.0 -> 2000
-            distance <= 500.0 -> 1000
-            distance <= 1000.0 -> 500
-            else -> 0
-        }.coerceAtLeast(0)
+    private fun calculateDistance(lat1: Double, lng1: Double, lat2: Double, lng2: Double): Double {
+        return DistanceCalculator.calculateDistance(lat1, lng1, lat2, lng2)
     }
 }
 

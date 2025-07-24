@@ -180,16 +180,24 @@ class GameViewModel @Inject constructor(
         }
     }
 
-    private fun startRoundTimer(duration: Long = 60000L) {
+    private fun startRoundTimer(duration: Long = Constants.MAX_ROUND_TIME_MS) {
         gameTimer?.cancel()
+        setState(state.value.copy(timeRemaining = duration))
+
         gameTimer = viewModelScope.launch {
             var timeRemaining = duration
-            while (timeRemaining > 0) {
+            val startTime = System.currentTimeMillis()
+
+            while (timeRemaining > 0 && !state.value.isGuessSubmitted) {
                 delay(1000L)
                 timeRemaining -= 1000L
                 setState(state.value.copy(timeRemaining = timeRemaining))
             }
-            submitGuess(0.0, 0.0) // Automatische Abgabe bei Zeitablauf
+
+            // Auto-submit wenn Zeit abgelaufen
+            if (!state.value.isGuessSubmitted && timeRemaining <= 0) {
+                submitGuess(0.0, 0.0) // timeSpent Parameter entfernen
+            }
         }
     }
 

@@ -27,10 +27,21 @@ object Constants {
     const val PREF_SOUND_ENABLED = "sound_enabled"
     const val PREF_VIBRATION_ENABLED = "vibration_enabled"
 
-    // Distance thresholds for scoring
+    // Score Thresholds (in km)
     const val PERFECT_DISTANCE_KM = 1.0
     const val EXCELLENT_DISTANCE_KM = 10.0
     const val GOOD_DISTANCE_KM = 50.0
-    const val FAIR_DISTANCE_KM = 100.0
-    const val POOR_DISTANCE_KM = 500.0
+    const val FAIR_DISTANCE_KM = 200.0
+    const val POOR_DISTANCE_KM = 1000.0
+
+    // Database
+    const val DATABASE_NAME = "geoguessr_database"
+    const val DATABASE_VERSION = 2
+
+    // Network
+    const val BASE_URL = "https://your-api-url.com/"
+    const val CONNECT_TIMEOUT = 30L
+    const val READ_TIMEOUT = 30L
+    const val WRITE_TIMEOUT = 30L
+
 }
