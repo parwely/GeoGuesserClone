@@ -45,9 +45,9 @@ fun MenuScreen(
     authViewModel: AuthViewModel = hiltViewModel()
 ) {
     val authState by authViewModel.state.collectAsState()
-
-    LaunchedEffect(authState.isLoggedIn) {
-        if (!authState.isLoggedIn) {
+    //nur bei explizitem Logout navigieren
+    if (!authState.isLoggedIn) {
+        LaunchedEffect(Unit) {
             onNavigateToAuth()
         }
     }

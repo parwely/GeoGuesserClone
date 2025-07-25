@@ -26,7 +26,16 @@ class LocationRepository @Inject constructor(
                 return Result.success(unusedLocation)
             }
 
-            // Falls keine unbenutzte Location vorhanden, versuche online
+            // Falls keine lokalen Locations, erstelle Fallback-Locations
+            val fallbackLocations = createFallbackLocations()
+            if (fallbackLocations.isNotEmpty()) {
+                locationDao.insertLocations(fallbackLocations)
+                val randomLocation = fallbackLocations.random()
+                locationDao.markLocationAsUsed(randomLocation.id)
+                return Result.success(randomLocation)
+            }
+
+            // Versuche online
             val response = apiService.getRandomLocation()
             if (response.isSuccessful) {
                 val locationResponse = response.body()!!
@@ -45,23 +54,49 @@ class LocationRepository @Inject constructor(
                 locationDao.insertLocation(locationEntity)
                 Result.success(locationEntity)
             } else {
-                // Fallback zu einer zufälligen lokalen Location
-                val randomLocation = locationDao.getRandomLocations(1).firstOrNull()
-                if (randomLocation != null) {
-                    Result.success(randomLocation)
-                } else {
-                    Result.failure(Exception("Keine Locations verfügbar"))
-                }
+                Result.failure(Exception("Keine Locations verfügbar"))
             }
         } catch (e: Exception) {
-            // Offline Fallback
-            val randomLocation = locationDao.getRandomLocations(1).firstOrNull()
-            if (randomLocation != null) {
-                Result.success(randomLocation)
-            } else {
-                Result.failure(e)
-            }
+            Result.failure(e)
         }
+    }
+
+    private fun createFallbackLocations(): List<LocationEntity> {
+        return listOf(
+            LocationEntity(
+                id = "fallback_1",
+                latitude = 48.8566,
+                longitude = 2.3522,
+                imageUrl = "https://images.unsplash.com/photo-1502602898536-47ad22581b52",
+                country = "France",
+                city = "Paris",
+                difficulty = 2,
+                isCached = true,
+                isUsed = false
+            ),
+            LocationEntity(
+                id = "fallback_2",
+                latitude = 51.5074,
+                longitude = -0.1278,
+                imageUrl = "https://images.unsplash.com/photo-1513635269975-59663e0ac1ad",
+                country = "United Kingdom",
+                city = "London",
+                difficulty = 2,
+                isCached = true,
+                isUsed = false
+            ),
+            LocationEntity(
+                id = "fallback_3",
+                latitude = 40.7128,
+                longitude = -74.0060,
+                imageUrl = "https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9",
+                country = "United States",
+                city = "New York",
+                difficulty = 3,
+                isCached = true,
+                isUsed = false
+            )
+        )
     }
 
     suspend fun preloadLocations() {

@@ -26,12 +26,13 @@ fun GuessMapView(
 ) {
     val context = LocalContext.current
     var selectedPoint by remember { mutableStateOf<GeoPoint?>(null) }
+    var mapView by remember { mutableStateOf<MapView?>(null) }
 
     LaunchedEffect(Unit) {
-        Configuration.getInstance().load(
-            context,
-            context.getSharedPreferences("osmdroid", android.content.Context.MODE_PRIVATE)
-        )
+        Configuration.getInstance().apply {
+            load(context, context.getSharedPreferences("osmdroid", android.content.Context.MODE_PRIVATE))
+            userAgentValue = "GeoGuesserClone"
+        }
     }
 
     Card(
@@ -54,21 +55,29 @@ fun GuessMapView(
                 AndroidView(
                     factory = { ctx ->
                         MapView(ctx).apply {
+                            mapView = this
                             setTileSource(TileSourceFactory.MAPNIK)
                             setMultiTouchControls(true)
-                            controller.setZoom(2.0)
-                            controller.setCenter(GeoPoint(0.0, 0.0))
+                            controller.setZoom(3.0)
+                            controller.setCenter(GeoPoint(20.0, 0.0))
 
-                            val mapEventsReceiver = object : MapEventsReceiver {
+                            lateinit var mapEventsReceiver: MapEventsReceiver
+
+                            mapEventsReceiver = object : MapEventsReceiver {
                                 override fun singleTapConfirmedHelper(p: GeoPoint?): Boolean {
                                     p?.let { point ->
                                         selectedPoint = point
                                         overlays.clear()
 
-                                        val marker = Marker(this@apply)
-                                        marker.position = point
-                                        marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                                        val marker = Marker(this@apply).apply {
+                                            position = point
+                                            setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                                            title = "Deine Vermutung"
+                                        }
                                         overlays.add(marker)
+
+                                        // Re-add map events overlay
+                                        overlays.add(MapEventsOverlay(mapEventsReceiver))
                                         invalidate()
                                     }
                                     return true
@@ -79,7 +88,10 @@ fun GuessMapView(
                             overlays.add(MapEventsOverlay(mapEventsReceiver))
                         }
                     },
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize(),
+                    update = { view ->
+                        view.onResume()
+                    }
                 )
             }
 
@@ -113,6 +125,12 @@ fun GuessMapView(
                     }
                 }
             }
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            mapView?.onPause()
         }
     }
 }

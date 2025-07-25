@@ -1,5 +1,6 @@
 package com.example.geogeusserclone.ui.activities
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -7,14 +8,14 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.example.geogeusserclone.ui.components.*
+import com.example.geogeusserclone.ui.components.GameCompletionScreen
+import com.example.geogeusserclone.ui.components.GuessMapView
+import com.example.geogeusserclone.ui.components.LocationImageView
+import com.example.geogeusserclone.ui.components.RoundResultView
 import com.example.geogeusserclone.ui.theme.GeoGeusserCloneTheme
 import com.example.geogeusserclone.viewmodels.GameViewModel
-import com.example.geogeusserclone.utils.Constants
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
@@ -26,6 +27,7 @@ class GameActivity : ComponentActivity() {
             GeoGeusserCloneTheme {
                 GameScreen(
                     onNavigateToMenu = {
+                        startActivity(Intent(this, MenuActivity::class.java))
                         finish()
                     }
                 )
@@ -43,95 +45,82 @@ fun GameScreen(
 
     LaunchedEffect(Unit) {
         if (gameState.currentGame == null) {
-            gameViewModel.createNewGame(Constants.GAME_MODE_SINGLE)
+            gameViewModel.createNewGame()
         }
     }
 
     Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-        ) {
-            when {
-                gameState.gameCompleted -> {
-                    // Game completion screen
-                    gameState.currentGame?.let { game ->
-                        GameCompletionScreen(
-                            game = game,
-                            guesses = gameState.currentGuesses,
-                            onPlayAgain = {
-                                gameViewModel.createNewGame(Constants.GAME_MODE_SINGLE)
-                            },
-                            onMainMenu = onNavigateToMenu
-                        )
-                    }
-                }
-
-                gameState.showingResults && gameState.lastGuessResult != null -> {
-                    // Round result screen
-                    RoundResultView(
-                        guess = gameState.lastGuessResult!!,
-                        onNextRound = {
-                            gameViewModel.proceedToNextRound()
-                        },
-                        onShowMap = {
-                            // TODO: Show result map
-                        },
-                        isLastRound = gameState.currentGame?.currentRound == gameState.currentGame?.totalRounds
-                    )
-                }
-
-                gameState.isMapVisible -> {
-                    // Map for guessing
-                    MapGuessComponent(
-                        onGuessSelected = { lat, lng ->
-                            gameViewModel.submitGuess(lat, lng)
-                            gameViewModel.hideMap()
-                        },
-                        onMapClose = {
-                            gameViewModel.hideMap()
-                        }
-                    )
-                }
-
-                else -> {
-                    // Main game view with location image
-                    LocationImageView(
-                        location = gameState.currentLocation,
-                        timeRemaining = gameState.timeRemaining,
-                        onMapClick = {
-                            gameViewModel.showMap()
-                        }
-                    )
-                }
-            }
-
-            // Loading overlay
-            if (gameState.isLoading) {
+        when {
+            gameState.isLoading -> {
                 Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding),
+                    contentAlignment = androidx.compose.ui.Alignment.Center
                 ) {
-                    Card {
-                        Column(
-                            modifier = Modifier.padding(32.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            CircularProgressIndicator()
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text("Lade...")
-                        }
-                    }
+                    CircularProgressIndicator()
                 }
             }
 
-            // Error handling
-            gameState.error?.let { error ->
-                LaunchedEffect(error) {
-                    // Show error snackbar or handle error
-                    gameViewModel.clearError()
+            gameState.gameCompleted -> {
+                gameState.currentGame?.let { game ->
+                    GameCompletionScreen(
+                        game = game,
+                        guesses = gameState.currentGuesses,
+                        onPlayAgain = {
+                            gameViewModel.createNewGame()
+                        },
+                        onMainMenu = onNavigateToMenu,
+                        modifier = Modifier.padding(innerPadding)
+                    )
                 }
+            }
+
+            gameState.isMapVisible -> {
+                GuessMapView(
+                    onGuessSelected = { lat, lng ->
+                        gameViewModel.submitGuess(lat, lng)
+                        gameViewModel.hideMap()
+                    },
+                    onMapClose = {
+                        gameViewModel.hideMap()
+                    },
+                    modifier = Modifier.padding(innerPadding)
+                )
+            }
+
+            gameState.showingResults && gameState.lastGuessResult != null -> {
+                val game = gameState.currentGame
+                RoundResultView(
+                    guess = gameState.lastGuessResult!!,
+                    onNextRound = {
+                        gameViewModel.proceedToNextRound()
+                    },
+                    onShowMap = {
+                        // Show result map with both actual and guessed locations
+                        gameViewModel.showMap()
+                    },
+                    isLastRound = game?.currentRound == game?.totalRounds,
+                    modifier = Modifier.padding(innerPadding)
+                )
+            }
+
+            else -> {
+                LocationImageView(
+                    location = gameState.currentLocation,
+                    timeRemaining = gameState.timeRemaining,
+                    onMapClick = {
+                        gameViewModel.showMap()
+                    },
+                    modifier = Modifier.padding(innerPadding)
+                )
+            }
+        }
+
+        gameState.error?.let { error ->
+            LaunchedEffect(error) {
+                // Show error snackbar or dialog
+                gameViewModel.clearError()
             }
         }
     }

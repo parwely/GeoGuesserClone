@@ -20,17 +20,18 @@ class AuthViewModel @Inject constructor(
 ) : BaseViewModel<AuthState>(AuthState()) {
 
     init {
-        checkAuthStatus()
+        checkInitialAuthStatus()
     }
 
-    private fun checkAuthStatus() {
+    private fun checkInitialAuthStatus() {
         viewModelScope.launch {
-            userRepository.getCurrentUserFlow().collect { user ->
-                setState(state.value.copy(
-                    currentUser = user,
-                    isLoggedIn = user != null
-                ))
-            }
+            val currentUser = userRepository.getCurrentUser()
+            setState(
+                state.value.copy(
+                    currentUser = currentUser,
+                    isLoggedIn = currentUser != null
+                )
+            )
         }
     }
 
@@ -57,6 +58,16 @@ class AuthViewModel @Inject constructor(
     }
 
     fun register(username: String, email: String, password: String) {
+        if (username.isBlank() || email.isBlank() || password.isBlank()) {
+            setState(state.value.copy(error = "Alle Felder sind erforderlich"))
+            return
+        }
+
+        if (password.length < 6) {
+            setState(state.value.copy(error = "Passwort muss mindestens 6 Zeichen lang sein"))
+            return
+        }
+
         viewModelScope.launch {
             setState(state.value.copy(isLoading = true, error = null))
 
