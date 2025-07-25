@@ -39,7 +39,9 @@ object Constants {
     const val DATABASE_VERSION = 2
 
     // Network
-    const val BASE_URL = "https://your-api-url.com/"
+    const val BASE_URL = "http://10.0.2.2:3000/api/"
+    //oder:
+    // const val BASE_URL = "http://deine-ip:3000/api/" // Für echtes Gerät
     const val CONNECT_TIMEOUT = 30L
     const val READ_TIMEOUT = 30L
     const val WRITE_TIMEOUT = 30L

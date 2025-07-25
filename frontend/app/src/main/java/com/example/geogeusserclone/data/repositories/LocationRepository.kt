@@ -129,4 +129,17 @@ class LocationRepository @Inject constructor(
     }
 
     suspend fun getCachedLocationCount(): Int = locationDao.getCachedLocationCount()
+
+    suspend fun testBackendConnection(): Result<Boolean> {
+        return try {
+            val response = apiService.getLocations(1) // Teste mit nur einer Location
+            if (response.isSuccessful) {
+                Result.success(true)
+            } else {
+                Result.failure(Exception("Backend nicht erreichbar: ${response.code()}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(Exception("Netzwerkfehler: ${e.message}"))
+        }
+    }
 }
