@@ -1,18 +1,23 @@
 package com.example.geogeusserclone.ui.components
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.geogeusserclone.data.database.entities.GameEntity
 import com.example.geogeusserclone.data.database.entities.GuessEntity
 import com.example.geogeusserclone.utils.DistanceCalculator
 import com.example.geogeusserclone.utils.ScoreCalculator
+import com.example.geogeusserclone.utils.ScoreRating
 
 @Composable
 fun GameCompletionScreen(
@@ -299,5 +304,15 @@ private fun EnhancedRoundSummaryCard(
                 fontWeight = FontWeight.Bold
             )
         }
+    }
+}
+private fun getRatingText(rating: ScoreRating): String {
+    return when (rating) {
+        ScoreRating.PERFECT -> "Perfekt! 🎯"
+        ScoreRating.EXCELLENT -> "Ausgezeichnet! 🌟"
+        ScoreRating.GOOD -> "Gut gemacht! 👍"
+        ScoreRating.FAIR -> "Nicht schlecht! 👌"
+        ScoreRating.POOR -> "Verbesserungswürdig 📍"
+        ScoreRating.TERRIBLE -> "Mehr Glück beim nächsten Mal 🤞"
     }
 }

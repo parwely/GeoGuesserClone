@@ -1,14 +1,21 @@
 package com.example.geogeusserclone.ui.components
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.geogeusserclone.data.database.entities.GuessEntity
 import com.example.geogeusserclone.utils.DistanceCalculator
 import com.example.geogeusserclone.utils.ScoreCalculator
+import com.example.geogeusserclone.utils.ScoreRating
 
 @Composable
 fun RoundResultView(
@@ -150,7 +157,10 @@ private fun ScoreBreakdownCard(
                 )
             }
 
-            Divider(modifier = Modifier.padding(vertical = 8.dp))
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 8.dp),
+                color = MaterialTheme.colorScheme.outlineVariant
+            )
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -293,4 +303,4 @@ private fun getRatingText(rating: ScoreRating): String {
         ScoreRating.POOR -> "Verbesserungswürdig 📍"
         ScoreRating.TERRIBLE -> "Mehr Glück beim nächsten Mal 🤞"
     }
-}}
+}

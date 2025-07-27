@@ -11,6 +11,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import android.graphics.Paint
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -129,8 +130,12 @@ fun GuessMapView(
                         val line = Polyline().apply {
                             addPoint(guessLocation)
                             addPoint(actualLocation)
+                        // Verwende die neue API für Farbe und Breite
+                        outlinePaint.apply {
                             color = Color.Red.toArgb()
-                            width = 8f
+                            strokeWidth = 8f
+                            style = funcPaint.Style.STROKE
+                        }
                             title = "Distanz zur tatsächlichen Location"
                         }
                         map.overlays.add(line)
