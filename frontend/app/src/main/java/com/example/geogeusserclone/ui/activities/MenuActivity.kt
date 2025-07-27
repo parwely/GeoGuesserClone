@@ -45,12 +45,13 @@ fun MenuScreen(
     authViewModel: AuthViewModel = hiltViewModel()
 ) {
     val authState by authViewModel.state.collectAsState()
-    //nur bei explizitem Logout navigieren
-    if (!authState.isLoggedIn) {
-        LaunchedEffect(Unit) {
-            onNavigateToAuth()
-        }
-    }
+
+    // Entferne diese automatische Navigation - sie verursacht die Schleife
+    // if (!authState.isLoggedIn) {
+    //     LaunchedEffect(Unit) {
+    //         onNavigateToAuth()
+    //     }
+    // }
 
     Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
         Column(
@@ -113,6 +114,7 @@ fun MenuScreen(
             TextButton(
                 onClick = {
                     authViewModel.logout()
+                    // Navigiere erst nach dem Logout
                     onNavigateToAuth()
                 }
             ) {
