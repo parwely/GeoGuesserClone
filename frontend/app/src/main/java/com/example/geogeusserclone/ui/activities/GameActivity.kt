@@ -77,7 +77,7 @@ fun GameScreen(
 
                 gameState.isMapVisible -> {
                     GuessMapView(
-                        onGuessSelected = { lat, lng ->
+                        onGuessSelected = { lat: Double, lng: Double ->
                             gameViewModel.submitGuess(lat, lng)
                             gameViewModel.hideMap()
                         },

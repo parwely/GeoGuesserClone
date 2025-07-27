@@ -1,216 +1,282 @@
 package com.example.geogeusserclone.viewmodels
 
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.geogeusserclone.data.database.entities.GameEntity
-import com.example.geogeusserclone.data.database.entities.GuessEntity
 import com.example.geogeusserclone.data.database.entities.LocationEntity
+import com.example.geogeusserclone.data.database.entities.GuessEntity
+import com.example.geogeusserclone.data.models.GameState
 import com.example.geogeusserclone.data.repositories.GameRepository
 import com.example.geogeusserclone.data.repositories.LocationRepository
 import com.example.geogeusserclone.data.repositories.UserRepository
 import com.example.geogeusserclone.utils.Constants
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.time.delay
+import org.osmdroid.util.GeoPoint
 import javax.inject.Inject
-
-data class GameState(
-    val isLoading: Boolean = false,
-    val currentGame: GameEntity? = null,
-    val currentLocation: LocationEntity? = null,
-    val currentGuesses: List<GuessEntity> = emptyList(),
-    val isGuessSubmitted: Boolean = false,
-    val lastGuessResult: GuessEntity? = null,
-    val error: String? = null,
-    val gameCompleted: Boolean = false,
-    val showingResults: Boolean = false,
-    val timeRemaining: Long = 0L,
-    val isMapVisible: Boolean = false
-)
 
 @HiltViewModel
 class GameViewModel @Inject constructor(
     private val gameRepository: GameRepository,
     private val locationRepository: LocationRepository,
     private val userRepository: UserRepository
-) : BaseViewModel<GameState>(GameState()) {
+) : ViewModel() {
 
-    private var gameTimer: kotlinx.coroutines.Job? = null
+    private val _state = MutableStateFlow(GameState())
+    val state: StateFlow<GameState> = _state.asStateFlow()
 
-    fun createNewGame(gameMode: String = Constants.GAME_MODE_SINGLE, rounds: Int = Constants.DEFAULT_GAME_ROUNDS) {
+    private var timerJob: Job? = null
+    private var currentGame: GameEntity? = null
+
+    init {
+        loadActiveGame()
+    }
+
+    private fun loadActiveGame() {
         viewModelScope.launch {
-            val currentUser = userRepository.getCurrentUser()
-            if (currentUser == null) {
-                setState(state.value.copy(error = "Benutzer nicht angemeldet"))
-                return@launch
+            try {
+                val currentUser = userRepository.getCurrentUser()
+                if (currentUser != null) {
+                    val activeGame = gameRepository.getActiveGame(currentUser.id)
+                    if (activeGame != null && !activeGame.isCompleted) {
+                        currentGame = activeGame
+                        _state.value = _state.value.copy(currentGame = activeGame)
+                        loadCurrentLocation()
+                        loadGameGuesses(activeGame.id)
+                        startTimer()
+                    }
+                }
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(error = "Fehler beim Laden des Spiels: ${e.message}")
             }
-
-            setState(state.value.copy(isLoading = true, error = null))
-
-            gameRepository.createGame(currentUser.id, gameMode, rounds)
-                .onSuccess { game ->
-                    setState(state.value.copy(
-                        isLoading = false,
-                        currentGame = game,
-                        gameCompleted = false,
-                        showingResults = false
-                    ))
-                    loadNextLocation()
-                    observeGameGuesses(game.id)
-                }
-                .onFailure { exception ->
-                    setState(state.value.copy(
-                        isLoading = false,
-                        error = exception.message ?: "Spiel konnte nicht erstellt werden"
-                    ))
-                }
         }
     }
 
-    fun loadNextLocation() {
+    fun createNewGame() {
         viewModelScope.launch {
-            setState(state.value.copy(isLoading = true))
+            try {
+                _state.value = _state.value.copy(isLoading = true, error = null, gameCompleted = false)
 
-            locationRepository.getRandomLocation()
-                .onSuccess { location ->
-                    setState(state.value.copy(
-                        isLoading = false,
-                        currentLocation = location,
-                        isGuessSubmitted = false,
+                val currentUser = userRepository.getCurrentUser()
+                    ?: throw Exception("Kein Benutzer angemeldet")
+
+                val result = gameRepository.createGame(
+                    userId = currentUser.id,
+                    gameMode = "classic",
+                    rounds = 5
+                )
+
+                result.onSuccess { game ->
+                    currentGame = game
+                    _state.value = _state.value.copy(
+                        currentGame = game,
+                        currentGuesses = emptyList(),
                         lastGuessResult = null,
                         showingResults = false,
                         isMapVisible = false
-                    ))
-                    startRoundTimer()
+                    )
+                    loadCurrentLocation()
+                    startTimer()
+                }.onFailure { exception ->
+                    _state.value = _state.value.copy(
+                        error = "Fehler beim Erstellen des Spiels: ${exception.message}",
+                        isLoading = false
+                    )
                 }
-                .onFailure { exception ->
-                    setState(state.value.copy(
-                        isLoading = false,
-                        error = exception.message ?: "Location konnte nicht geladen werden"
-                    ))
-                }
-        }
-    }
-
-    fun submitGuess(guessLat: Double, guessLng: Double) {
-        val game = state.value.currentGame
-        val location = state.value.currentLocation
-
-        if (game == null || location == null) {
-            setState(state.value.copy(error = "Spiel oder Location nicht verfügbar"))
-            return
-        }
-
-        if (state.value.isGuessSubmitted) {
-            return // Prevent double submission
-        }
-
-        viewModelScope.launch {
-            setState(state.value.copy(isLoading = true, isGuessSubmitted = true))
-            stopRoundTimer()
-
-            gameRepository.submitGuess(
-                gameId = game.id,
-                locationId = location.id,
-                guessLat = guessLat,
-                guessLng = guessLng,
-                actualLat = location.latitude,
-                actualLng = location.longitude
-            ).onSuccess { guess ->
-                setState(state.value.copy(
-                    isLoading = false,
-                    lastGuessResult = guess,
-                    showingResults = true
-                ))
-
-                // Check if game is completed
-                checkGameCompletion()
-
-            }.onFailure { exception ->
-                setState(state.value.copy(
-                    isLoading = false,
-                    isGuessSubmitted = false,
-                    error = exception.message ?: "Guess konnte nicht übermittelt werden"
-                ))
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(
+                    error = "Unerwarteter Fehler: ${e.message}",
+                    isLoading = false
+                )
             }
         }
     }
 
-    private fun checkGameCompletion() {
-        val game = state.value.currentGame ?: return
-
+    private fun loadCurrentLocation() {
         viewModelScope.launch {
-            val updatedGame = gameRepository.getActiveGame(game.userId)
-            if (updatedGame?.isCompleted == true) {
-                gameRepository.completeGame(game.id)
-                setState(state.value.copy(
-                    currentGame = updatedGame,
-                    gameCompleted = true
-                ))
+            try {
+                val result = locationRepository.getRandomLocation()
+                result.onSuccess { location ->
+                    _state.value = _state.value.copy(
+                        currentLocation = location,
+                        isLoading = false
+                    )
+                }.onFailure { exception ->
+                    _state.value = _state.value.copy(
+                        error = "Fehler beim Laden der Location: ${exception.message}",
+                        isLoading = false
+                    )
+                }
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(
+                    error = "Fehler beim Laden der Location: ${e.message}",
+                    isLoading = false
+                )
+            }
+        }
+    }
+
+    fun submitGuess(latitude: Double, longitude: Double) {
+        viewModelScope.launch {
+            try {
+                val game = currentGame ?: return@launch
+                val location = _state.value.currentLocation ?: return@launch
+
+                stopTimer()
+
+                val result = gameRepository.submitGuess(
+                    gameId = game.id,
+                    locationId = location.id,
+                    guessLat = latitude,
+                    guessLng = longitude,
+                    actualLat = location.latitude,
+                    actualLng = location.longitude
+                )
+
+                result.onSuccess { guess ->
+                    _state.value = _state.value.copy(
+                        lastGuessResult = guess,
+                        showingResults = true,
+                        isGuessSubmitted = true,
+                        comparisonGuessPoint = GeoPoint(latitude, longitude),
+                        comparisonActualPoint = GeoPoint(location.latitude, location.longitude)
+                    )
+
+                    // Reload current game to get updated score
+                    val updatedGame = gameRepository.getActiveGame(game.userId)
+                    updatedGame?.let {
+                        currentGame = it
+                        _state.value = _state.value.copy(currentGame = it)
+                    }
+
+                    loadGameGuesses(game.id)
+                }.onFailure { exception ->
+                    _state.value = _state.value.copy(
+                        error = "Fehler beim Übermitteln der Vermutung: ${exception.message}"
+                    )
+                }
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(
+                    error = "Unerwarteter Fehler: ${e.message}"
+                )
             }
         }
     }
 
     fun proceedToNextRound() {
-        val game = state.value.currentGame
-        if (game?.isCompleted == true) {
-            setState(state.value.copy(gameCompleted = true))
-        } else {
-            loadNextLocation()
-            setState(state.value.copy(
-                currentGame = game?.copy(currentRound = game.currentRound + 1)
-            ))
+        viewModelScope.launch {
+            val game = currentGame ?: return@launch
+
+            if (game.currentRound > game.totalRounds) {
+                // Spiel beendet
+                completeGame()
+            } else {
+                // Nächste Runde
+                _state.value = _state.value.copy(
+                    showingResults = false,
+                    lastGuessResult = null,
+                    isGuessSubmitted = false,
+                    comparisonGuessPoint = null,
+                    comparisonActualPoint = null,
+                    isLoading = true
+                )
+                loadCurrentLocation()
+                startTimer()
+            }
+        }
+    }
+
+    private fun completeGame() {
+        viewModelScope.launch {
+            val game = currentGame ?: return@launch
+
+            gameRepository.completeGame(game.id).onSuccess {
+                _state.value = _state.value.copy(
+                    gameCompleted = true,
+                    showingResults = false
+                )
+                stopTimer()
+            }
         }
     }
 
     fun showMap() {
-        setState(state.value.copy(isMapVisible = true))
+        _state.value = _state.value.copy(isMapVisible = true)
     }
 
     fun hideMap() {
-        setState(state.value.copy(isMapVisible = false))
-    }
-
-    private fun observeGameGuesses(gameId: String) {
-        viewModelScope.launch {
-            gameRepository.getGuessesByGame(gameId).collectLatest { guesses ->
-                setState(state.value.copy(currentGuesses = guesses))
-            }
-        }
-    }
-
-    private fun startRoundTimer(duration: Long = Constants.MAX_ROUND_TIME_MS) {
-        gameTimer?.cancel()
-        setState(state.value.copy(timeRemaining = duration))
-
-        gameTimer = viewModelScope.launch {
-            var timeRemaining = duration
-            val startTime = System.currentTimeMillis()
-
-            while (timeRemaining > 0 && !state.value.isGuessSubmitted) {
-                delay(1000L)
-                timeRemaining -= 1000L
-                setState(state.value.copy(timeRemaining = timeRemaining))
-            }
-
-            // Auto-submit wenn Zeit abgelaufen
-            if (!state.value.isGuessSubmitted && timeRemaining <= 0) {
-                submitGuess(0.0, 0.0) // timeSpent Parameter entfernen
-            }
-        }
-    }
-
-    private fun stopRoundTimer() {
-        gameTimer?.cancel()
+        _state.value = _state.value.copy(isMapVisible = false)
     }
 
     fun clearError() {
-        setState(state.value.copy(error = null))
+        _state.value = _state.value.copy(error = null)
+    }
+
+    private fun loadGameGuesses(gameId: String) {
+        viewModelScope.launch {
+            gameRepository.getGuessesByGame(gameId).collect { guesses ->
+                _state.value = _state.value.copy(currentGuesses = guesses)
+            }
+        }
+    }
+
+    private fun startTimer() {
+        stopTimer()
+        timerJob = viewModelScope.launch {
+            var timeRemaining = Constants.MAX_ROUND_TIME_MS
+            _state.value = _state.value.copy(timeRemaining = timeRemaining)
+
+            while (timeRemaining > 0 && !_state.value.isGuessSubmitted) {
+                delay(1000)
+                timeRemaining -= 1000
+                _state.value = _state.value.copy(timeRemaining = timeRemaining)
+            }
+
+            if (timeRemaining <= 0 && !_state.value.isGuessSubmitted) {
+                // Zeit abgelaufen - automatisch eine Vermutung abgeben
+                val location = _state.value.currentLocation
+                if (location != null) {
+                    submitGuess(0.0, 0.0) // Default position
+                }
+            }
+        }
+    }
+
+    private fun stopTimer() {
+        timerJob?.cancel()
+        timerJob = null
+    }
+
+
+    fun showLocationReveal(actualLocation: LocationEntity, guessResult: GuessEntity) {
+        setState(state.value.copy(
+            isMapVisible = true,
+            showLocationReveal = true,
+            revealActualLocation = actualLocation,
+            revealGuessResult = guessResult
+        ))
+    }
+
+    fun hideLocationReveal() {
+        setState(
+            state.value.copy(
+                showLocationReveal = false,
+                revealActualLocation = null,
+                revealGuessResult = null
+            )
+        )
+    }
+
+    // setState Funktion als private Funktion in der Klasse
+    private fun setState(newState: GameState) {
+        _state.value = newState
     }
 
     override fun onCleared() {
         super.onCleared()
-        stopRoundTimer()
+        stopTimer()
     }
 }
