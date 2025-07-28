@@ -30,6 +30,12 @@ object NetworkModule {
 
     @Provides
     @Singleton
+    fun provideAuthInterceptor(): AuthInterceptor {
+        return AuthInterceptor()
+    }
+
+    @Provides
+    @Singleton
     fun provideOkHttpClient(
         authInterceptor: AuthInterceptor,
         cache: Cache

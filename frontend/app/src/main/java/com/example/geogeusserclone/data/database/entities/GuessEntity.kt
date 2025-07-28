@@ -24,19 +24,19 @@ import androidx.room.PrimaryKey
     indices = [
         Index(value = ["gameId"]),
         Index(value = ["locationId"]),
-        Index(value = ["timestamp"])
+        Index(value = ["submittedAt"])
     ]
 )
 data class GuessEntity(
     @PrimaryKey val id: String,
     val gameId: String,
     val locationId: String,
-    val guessLatitude: Double,
-    val guessLongitude: Double,
-    val actualLatitude: Double,
-    val actualLongitude: Double,
+    val guessLat: Double,  // Geändert von guessLatitude
+    val guessLng: Double,  // Geändert von guessLongitude
+    val actualLat: Double, // Geändert von actualLatitude
+    val actualLng: Double, // Geändert von actualLongitude
     val distance: Double, // in kilometers
     val score: Int,
     val timeSpent: Long, // in milliseconds
-    val timestamp: Long = System.currentTimeMillis()
+    val submittedAt: Long = System.currentTimeMillis() // Geändert von timestamp
 )

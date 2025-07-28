@@ -1,11 +1,9 @@
 package com.example.geogeusserclone.ui.components
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -111,8 +109,8 @@ fun GameCompletionScreen(
             EnhancedRoundSummaryCard(
                 guess = guess,
                 roundNumber = index + 1,
-                isBestRound = guess == bestRound,
-                isWorstRound = guess == worstRound
+                isBestRound = guess.id == bestRound?.id, // Vergleiche über ID statt Objekt
+                isWorstRound = guess.id == worstRound?.id  // Vergleiche über ID statt Objekt
             )
         }
 
@@ -306,6 +304,7 @@ private fun EnhancedRoundSummaryCard(
         }
     }
 }
+
 private fun getRatingText(rating: ScoreRating): String {
     return when (rating) {
         ScoreRating.PERFECT -> "Perfekt! 🎯"

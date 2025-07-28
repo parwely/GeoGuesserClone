@@ -17,18 +17,20 @@ import androidx.room.PrimaryKey
     ],
     indices = [
         Index(value = ["userId"]),
-        Index(value = ["timestamp"]),
+        Index(value = ["createdAt"]),
         Index(value = ["isCompleted"])
     ]
 )
 data class GameEntity(
     @PrimaryKey val id: String,
     val userId: String,
-    val score: Int,
-    val totalRounds: Int,
-    val currentRound: Int,
-    val isCompleted: Boolean,
-    val gameMode: String, // "SINGLE", "MULTIPLAYER", "BATTLE_ROYALE"
-    val timestamp: Long,
+    val gameMode: String, // "classic", "multiplayer", "battle_royale"
+    val totalRounds: Int = 5,
+    val currentRound: Int = 1,
+    val score: Int = 0,
+    val isCompleted: Boolean = false,
+    val createdAt: Long = System.currentTimeMillis(),
+    val startedAt: Long? = null,
+    val completedAt: Long? = null,
     val duration: Long? = null
 )

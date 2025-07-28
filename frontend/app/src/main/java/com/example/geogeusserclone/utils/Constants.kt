@@ -12,7 +12,10 @@ object Constants {
     const val MIN_ROUND_TIME_MS = 10000L // 10 seconds
 
     // Scoring
+    const val ROUNDS_PER_GAME = 5
     const val MAX_SCORE_PER_ROUND = 5000
+    const val TIME_BONUS_MAX = 500
+    const val GUESS_TIME_LIMIT_SECONDS = 120L
     const val PERFECT_GUESS_DISTANCE_KM = 1.0
 
     // Map Settings

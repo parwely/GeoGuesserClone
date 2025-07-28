@@ -5,8 +5,7 @@ import com.example.geogeusserclone.data.database.dao.GuessDao
 import com.example.geogeusserclone.data.database.entities.GameEntity
 import com.example.geogeusserclone.data.database.entities.GuessEntity
 import com.example.geogeusserclone.data.network.ApiService
-import com.example.geogeusserclone.data.network.CreateGameRequest
-import com.example.geogeusserclone.data.network.GuessRequest
+import com.example.geogeusserclone.utils.Constants
 import com.example.geogeusserclone.utils.DistanceCalculator
 import com.example.geogeusserclone.utils.ScoreCalculator
 import kotlinx.coroutines.flow.Flow
@@ -19,60 +18,33 @@ class GameRepository @Inject constructor(
     private val apiService: ApiService,
     private val gameDao: GameDao,
     private val guessDao: GuessDao
-) {
+) : BaseRepository() {
 
-    fun getGamesByUser(userId: String): Flow<List<GameEntity>> = gameDao.getGamesByUser(userId)
-
-    suspend fun getActiveGame(userId: String): GameEntity? = gameDao.getActiveGame(userId)
-
-    suspend fun createGame(userId: String, gameMode: String, rounds: Int = 5): Result<GameEntity> {
+    suspend fun createGame(
+        userId: String,
+        gameMode: String = "classic",
+        rounds: Int = 5
+    ): Result<GameEntity> {
         return try {
-            // Try online first
-            val response = apiService.createGame(CreateGameRequest(gameMode, rounds))
+            // Erstelle neue Spiel-ID
+            val gameId = UUID.randomUUID().toString()
 
-            val gameEntity = if (response.isSuccessful) {
-                val gameResponse = response.body()!!
-                GameEntity(
-                    id = gameResponse.id,
-                    userId = userId,
-                    score = 0,
-                    totalRounds = rounds,
-                    currentRound = 1,
-                    isCompleted = false,
-                    gameMode = gameMode,
-                    timestamp = System.currentTimeMillis()
-                )
-            } else {
-                // Fallback to offline mode
-                GameEntity(
-                    id = UUID.randomUUID().toString(),
-                    userId = userId,
-                    score = 0,
-                    totalRounds = rounds,
-                    currentRound = 1,
-                    isCompleted = false,
-                    gameMode = gameMode,
-                    timestamp = System.currentTimeMillis()
-                )
-            }
-
-            gameDao.insertGame(gameEntity)
-            Result.success(gameEntity)
-
-        } catch (e: Exception) {
-            // Offline fallback
-            val gameEntity = GameEntity(
-                id = UUID.randomUUID().toString(),
+            val game = GameEntity(
+                id = gameId,
                 userId = userId,
-                score = 0,
+                gameMode = gameMode,
                 totalRounds = rounds,
                 currentRound = 1,
+                score = 0,
                 isCompleted = false,
-                gameMode = gameMode,
-                timestamp = System.currentTimeMillis()
+                createdAt = System.currentTimeMillis(),
+                startedAt = System.currentTimeMillis()
             )
-            gameDao.insertGame(gameEntity)
-            Result.success(gameEntity)
+
+            gameDao.insertGame(game)
+            Result.success(game)
+        } catch (e: Exception) {
+            Result.failure(e)
         }
     }
 
@@ -82,135 +54,94 @@ class GameRepository @Inject constructor(
         guessLat: Double,
         guessLng: Double,
         actualLat: Double,
-        actualLng: Double
+        actualLng: Double,
+        timeSpent: Long = 0L
     ): Result<GuessEntity> {
         return try {
-            val distance = calculateDistance(guessLat, guessLng, actualLat, actualLng)
-            val score = calculateScore(distance)
+            val distance = DistanceCalculator.calculateDistance(
+                guessLat, guessLng, actualLat, actualLng
+            )
 
-            // Try to submit online
-            try {
-                val response = apiService.submitGuess(
-                    GuessRequest(gameId, locationId, guessLat, guessLng)
-                )
+            val score = ScoreCalculator.calculateScore(
+                distanceKm = distance,
+                timeSpentMs = timeSpent,
+                maxTimeMs = Constants.MAX_ROUND_TIME_MS
+            )
 
-                if (response.isSuccessful) {
-                    val guessResponse = response.body()!!
-                    // Use server calculated values if available
-                    val finalScore = guessResponse.score
-                    val finalDistance = guessResponse.distance
+            val guess = GuessEntity(
+                id = UUID.randomUUID().toString(),
+                gameId = gameId,
+                locationId = locationId,
+                guessLat = guessLat,     // Konsistent mit Entity
+                guessLng = guessLng,     // Konsistent mit Entity
+                actualLat = actualLat,   // Konsistent mit Entity
+                actualLng = actualLng,   // Konsistent mit Entity
+                distance = distance,
+                score = score,
+                timeSpent = timeSpent,
+                submittedAt = System.currentTimeMillis()
+            )
 
-                    val guessEntity = createGuessEntity(
-                        gameId, locationId, guessLat, guessLng,
-                        actualLat, actualLng, finalDistance, finalScore
+            guessDao.insertGuess(guess)
+
+            // Update game
+            val currentGame = gameDao.getGameById(gameId)
+            currentGame?.let { game ->
+                val newScore = game.score + score
+                val newRound = game.currentRound + 1
+
+                gameDao.updateGame(
+                    game.copy(
+                        score = newScore,
+                        currentRound = newRound
                     )
-
-                    guessDao.insertGuess(guessEntity)
-                    updateGameScore(gameId, finalScore)
-
-                    Result.success(guessEntity)
-                } else {
-                    throw Exception("Server error")
-                }
-            } catch (e: Exception) {
-                // Offline fallback
-                val guessEntity = createGuessEntity(
-                    gameId, locationId, guessLat, guessLng,
-                    actualLat, actualLng, distance, score
                 )
-
-                guessDao.insertGuess(guessEntity)
-                updateGameScore(gameId, score)
-
-                Result.success(guessEntity)
             }
 
+            Result.success(guess)
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
 
-    private suspend fun createGuessEntity(
-        gameId: String, locationId: String, guessLat: Double, guessLng: Double,
-        actualLat: Double, actualLng: Double, distance: Double, score: Int
-    ): GuessEntity {
-        return GuessEntity(
-            id = UUID.randomUUID().toString(),
-            gameId = gameId,
-            locationId = locationId,
-            guessLatitude = guessLat,
-            guessLongitude = guessLng,
-            actualLatitude = actualLat,
-            actualLongitude = actualLng,
-            distance = distance,
-            score = score,
-            timeSpent = 0L // Can be implemented later
-        )
-    }
-
-    // In GameRepository.kt - bessere Zeit-Integration
-    private suspend fun updateGameScore(gameId: String, additionalScore: Int, timeSpent: Long) {
-        val game = gameDao.getGameById(gameId)
-        game?.let {
-            val timeBonus = ScoreCalculator.calculateTimeBonus(timeSpent, Constants.MAX_ROUND_TIME_MS)
-            val totalScore = additionalScore + timeBonus
-
-            val updatedGame = it.copy(
-                score = it.score + totalScore,
-                currentRound = it.currentRound + 1,
-                isCompleted = it.currentRound >= it.totalRounds
-            )
-            gameDao.updateGame(updatedGame)
-        }
+    suspend fun getActiveGame(userId: String): GameEntity? {
+        return gameDao.getActiveGameByUser(userId)
     }
 
     suspend fun completeGame(gameId: String): Result<GameEntity> {
         return try {
             val game = gameDao.getGameById(gameId)
-            game?.let {
-                val completedGame = it.copy(
+            if (game != null) {
+                val completedGame = game.copy(
                     isCompleted = true,
-                    duration = System.currentTimeMillis() - it.timestamp
+                    completedAt = System.currentTimeMillis()
                 )
                 gameDao.updateGame(completedGame)
                 Result.success(completedGame)
-            } ?: Result.failure(Exception("Game not found"))
+            } else {
+                Result.failure(Exception("Spiel nicht gefunden"))
+            }
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
 
-    suspend fun getUserStats(userId: String): GameStats {
-        val gamesCount = gameDao.getCompletedGamesCount(userId)
-        val bestScore = gameDao.getBestScore(userId) ?: 0
-        val averageScore = gameDao.getAverageScore(userId) ?: 0.0
-        val averageDistance = guessDao.getAverageDistance(userId) ?: 0.0
-        val bestDistance = guessDao.getBestDistance(userId) ?: 0.0
-
-        return GameStats(
-            gamesPlayed = gamesCount,
-            bestScore = bestScore,
-            averageScore = averageScore,
-            averageDistance = averageDistance,
-            bestDistance = bestDistance
-        )
+    fun getGuessesByGame(gameId: String): Flow<List<GuessEntity>> {
+        return guessDao.getGuessesByGame(gameId)
     }
 
-    fun getGuessesByGame(gameId: String): Flow<List<GuessEntity>> = guessDao.getGuessesByGame(gameId)
-
-    private fun calculateScore(distance: Double, timeSpentMs: Long = 0L): Int {
-        return ScoreCalculator.calculateScore(distance, timeSpentMs)
+    suspend fun getGameHistory(userId: String): Flow<List<GameEntity>> {
+        return gameDao.getCompletedGamesByUser(userId)
     }
 
-    private fun calculateDistance(lat1: Double, lng1: Double, lat2: Double, lng2: Double): Double {
-        return DistanceCalculator.calculateDistance(lat1, lng1, lat2, lng2)
+    suspend fun deleteGame(gameId: String) {
+        gameDao.deleteGame(gameId)
+    }
+
+    private suspend fun updateGameScore(gameId: String, finalScore: Int) {
+        val game = gameDao.getGameById(gameId)
+        game?.let {
+            gameDao.updateGame(it.copy(score = finalScore))
+        }
     }
 }
-
-data class GameStats(
-    val gamesPlayed: Int,
-    val bestScore: Int,
-    val averageScore: Double,
-    val averageDistance: Double,
-    val bestDistance: Double
-)

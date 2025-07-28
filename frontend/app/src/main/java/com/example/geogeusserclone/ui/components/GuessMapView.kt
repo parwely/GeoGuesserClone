@@ -127,16 +127,20 @@ fun GuessMapView(
                     actualLocationMarker = actualMarker
 
                     // Verbindungslinie zwischen Guess und Actual Location
+                    // Verbindungslinie zwischen Guess und Actual Location
                     if (guessLocation != null) {
+                        // Map erstellen mit korrekten Property-Namen
+                        val guessPoint = GeoPoint(guessLocation.latitude, guessLocation.longitude)
+                        val actualPoint = GeoPoint(actualLocation.latitude, actualLocation.longitude)
+
                         val line = Polyline().apply {
-                            addPoint(guessLocation)
-                            addPoint(actualLocation)
-                        // Verwende die neue API für Farbe und Breite
-                        outlinePaint.apply {
-                            color = Color.Red.toArgb()
-                            strokeWidth = 8f
-                            style = Paint.Style.STROKE
-                        }
+                            addPoint(guessPoint)
+                            addPoint(actualPoint)
+                            outlinePaint.apply {
+                                color = Color.Red.toArgb()
+                                strokeWidth = 8f
+                                style = Paint.Style.STROKE
+                            }
                             title = "Distanz zur tatsächlichen Location"
                         }
                         map.overlays.add(line)
@@ -144,7 +148,7 @@ fun GuessMapView(
 
                         // Kamera auf beide Punkte fokussieren
                         val bounds = org.osmdroid.util.BoundingBox.fromGeoPoints(
-                            listOf(guessLocation, actualLocation)
+                            listOf(guessPoint, actualPoint)
                         )
                         map.zoomToBoundingBox(bounds, true, 100)
                     } else {
