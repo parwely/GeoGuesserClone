@@ -48,9 +48,9 @@ object NetworkModule {
             .addInterceptor(authInterceptor)
             .addInterceptor(loggingInterceptor)
             .cache(cache)
-            .connectTimeout(5, TimeUnit.SECONDS) // Reduziere Timeout
-            .readTimeout(5, TimeUnit.SECONDS)
-            .writeTimeout(5, TimeUnit.SECONDS)
+            .connectTimeout(Constants.CONNECT_TIMEOUT, TimeUnit.SECONDS)
+            .readTimeout(Constants.READ_TIMEOUT, TimeUnit.SECONDS)
+            .writeTimeout(Constants.WRITE_TIMEOUT, TimeUnit.SECONDS)
             .build()
     }
 
@@ -58,7 +58,7 @@ object NetworkModule {
     @Singleton
     fun provideRetrofit(okHttpClient: OkHttpClient): Retrofit {
         return Retrofit.Builder()
-            .baseUrl(Constants.BASE_URL) // Directly use Constants.BASE_URL
+            .baseUrl(Constants.BASE_URL)
             .client(okHttpClient)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
