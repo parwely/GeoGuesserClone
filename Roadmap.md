@@ -13,6 +13,7 @@
 2. **Core UI Components**
 3. **Local Database**
 4. **Networking Layer**
+   
 **Deliverables Phase 1:**
 - Working authentication system
 - Basic single-player game mode
@@ -23,12 +24,6 @@
 
 #### Game Logic Implementation
 1. **Single Player Mode**
-   - Location presentation system
-   - Interactive map for guessing
-   - Distance calculation (Haversine formula)
-   - Score calculation algorithm
-   - Round progression logic
-
 2. **Scoring System**
    ```kotlin
    object ScoreCalculator {
@@ -42,31 +37,12 @@
        }
    }
    ```
-
 3. **Game State Management**
-   - Round tracking
-   - Timer functionality
-   - Result calculation
-   - Local score persistence
 
 #### UI/UX Development
 1. **Street View Component**
-   - 360-degree image viewer
-   - Touch navigation controls
-   - Zoom functionality
-   - Loading states
-
 2. **Map Interface**
-   - Interactive world map
-   - Guess placement marker
-   - Zoom/pan controls
-   - Location reveal animation
-
 3. **Score Display**
-   - Round results screen
-   - Distance visualization
-   - Score breakdown
-   - Performance statistics
 
 **Deliverables Phase 2:**
 - Complete single-player experience
