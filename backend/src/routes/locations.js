@@ -307,4 +307,41 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+
+// Get Street View image for location
+router.get('/:id/streetview', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { heading = 0, pitch = 0, fov = 90 } = req.query;
+    
+    const location = await locationService.getLocationById(parseInt(id));
+    
+    const streetViewUrl = `https://maps.googleapis.com/maps/api/streetview?` +
+      `size=640x640` +
+      `&location=${location.coordinates.latitude},${location.coordinates.longitude}` +
+      `&heading=${heading}` +
+      `&pitch=${pitch}` +
+      `&fov=${fov}` +
+      `&key=${process.env.GOOGLE_STREETVIEW_API_KEY}`;
+    
+    res.json({
+      success: true,
+      data: {
+        streetViewUrl,
+        location: {
+          id: location.id,
+          coordinates: location.coordinates
+        }
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Street View request failed:', error.message);
+    res.status(500).json({
+      error: 'Failed to get Street View image',
+      message: 'Internal server error'
+    });
+  }
+});
+
 module.exports = router;
