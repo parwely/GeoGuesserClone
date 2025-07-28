@@ -59,6 +59,7 @@ fun GuessMapView(
                 MapView(ctx).apply {
                     setTileSource(TileSourceFactory.MAPNIK)
                     setMultiTouchControls(true)
+                    //Initilaisiere Kamera Pos
                     controller.setZoom(2.0)
                     controller.setCenter(GeoPoint(20.0, 0.0))
 
@@ -134,7 +135,7 @@ fun GuessMapView(
                         outlinePaint.apply {
                             color = Color.Red.toArgb()
                             strokeWidth = 8f
-                            style = funcPaint.Style.STROKE
+                            style = Paint.Style.STROKE
                         }
                             title = "Distanz zur tatsächlichen Location"
                         }
