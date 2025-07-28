@@ -7,7 +7,7 @@
 2. **Database Setup**
 3. **Authentication System**
 4. **Location Management**
-5. 
+   
 #### Android Development
 1. **Project Setup**
 2. **Core UI Components**
