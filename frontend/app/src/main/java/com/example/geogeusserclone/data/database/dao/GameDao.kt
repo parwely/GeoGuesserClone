@@ -7,23 +7,29 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface GameDao {
 
-    @Query("SELECT * FROM games WHERE userId = :userId ORDER BY timestamp DESC")
-    fun getGamesByUser(userId: String): Flow<List<GameEntity>>
+    @Query("SELECT * FROM games WHERE isCompleted = 1 AND userId = :userId ORDER BY completedAt DESC")
+    fun getCompletedGamesByUser(userId: String): Flow<List<GameEntity>>
+
+    @Query("SELECT * FROM games WHERE userId = :userId AND isCompleted = 0 LIMIT 1")
+    suspend fun getActiveGameByUser(userId: String): GameEntity?
 
     @Query("SELECT * FROM games WHERE id = :gameId")
     suspend fun getGameById(gameId: String): GameEntity?
 
-    @Query("SELECT * FROM games WHERE userId = :userId AND isCompleted = 0 LIMIT 1")
-    suspend fun getActiveGame(userId: String): GameEntity?
-
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertGame(game: GameEntity): Long
+    suspend fun insertGame(game: GameEntity)
 
     @Update
     suspend fun updateGame(game: GameEntity)
 
-    @Delete
-    suspend fun deleteGame(game: GameEntity)
+    @Query("DELETE FROM games WHERE id = :gameId")
+    suspend fun deleteGame(gameId: String)
+
+    @Query("SELECT * FROM games WHERE userId = :userId ORDER BY createdAt DESC")
+    fun getAllGamesByUser(userId: String): Flow<List<GameEntity>>
+
+    @Query("DELETE FROM games WHERE userId = :userId")
+    suspend fun deleteAllGamesByUser(userId: String)
 
     @Query("SELECT COUNT(*) FROM games WHERE userId = :userId AND isCompleted = 1")
     suspend fun getCompletedGamesCount(userId: String): Int
