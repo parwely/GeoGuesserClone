@@ -101,6 +101,10 @@ dependencies {
     // OSM Maps
     implementation(libs.osmdroid.android)
 
+    // WorkManager für Background Tasks
+    implementation("androidx.work:work-runtime-ktx:2.9.0")
+    implementation("androidx.hilt:hilt-work:1.1.0")
+
     // Testing
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

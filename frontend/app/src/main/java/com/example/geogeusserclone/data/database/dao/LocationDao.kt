@@ -19,6 +19,9 @@ interface LocationDao {
     @Query("SELECT * FROM locations WHERE isUsed = 0 ORDER BY RANDOM() LIMIT 1")
     suspend fun getRandomUnusedLocation(): LocationEntity?
 
+    @Query("SELECT * FROM locations WHERE isUsed = 0 ORDER BY RANDOM() LIMIT :count")
+    suspend fun getUnusedLocations(count: Int): List<LocationEntity>
+
     @Query("SELECT * FROM locations")
     suspend fun getAllLocations(): List<LocationEntity>
 

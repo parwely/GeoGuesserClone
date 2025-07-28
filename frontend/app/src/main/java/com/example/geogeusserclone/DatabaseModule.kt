@@ -10,6 +10,7 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import java.util.concurrent.Executors
 import javax.inject.Singleton
 
 @Module
@@ -37,7 +38,18 @@ object DatabaseModule {
             database.execSQL("ALTER TABLE users ADD COLUMN lastLoginAt INTEGER NOT NULL DEFAULT 0")
             database.execSQL("ALTER TABLE users ADD COLUMN createdAt INTEGER NOT NULL DEFAULT 0")
             database.execSQL("ALTER TABLE locations ADD COLUMN isUsed INTEGER NOT NULL DEFAULT 0")
+        }
+    }
 
+    private val MIGRATION_3_4 = object : Migration(3, 4) {
+        override fun migrate(database: SupportSQLiteDatabase) {
+            // Performance-optimierte Indizes hinzufügen
+            database.execSQL("CREATE INDEX IF NOT EXISTS `index_locations_isUsed_isCached` ON `locations` (`isUsed`, `isCached`)")
+            database.execSQL("CREATE INDEX IF NOT EXISTS `index_locations_difficulty` ON `locations` (`difficulty`)")
+            database.execSQL("CREATE INDEX IF NOT EXISTS `index_users_authToken` ON `users` (`authToken`)")
+
+            // Composite Index für bessere Query Performance
+            database.execSQL("CREATE INDEX IF NOT EXISTS `index_games_userId_isCompleted_completedAt` ON `games` (`userId`, `isCompleted`, `completedAt`)")
         }
     }
 
@@ -49,7 +61,8 @@ object DatabaseModule {
             AppDatabase::class.java,
             "geoguessr_database"
         )
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+            .setQueryExecutor(Executors.newFixedThreadPool(4)) // Thread Pool für bessere Performance
             .build()
     }
 }
