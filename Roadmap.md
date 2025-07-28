@@ -3,55 +3,16 @@
 ### Phase 1: Foundation Setup (Week 1-2)
 
 #### Backend Development
-1. **Project Initialization** DONE
-   - Set up Node.js project structure
-   - Configure Express.js server
-   - Implement basic routing
-   - Set up environment configuration
-
+1. **Project Initialization** 
 2. **Database Setup**
-   - Create Neon PostgreSQL database
-   - Design and implement schema
-   - Set up PostGIS extension
-   - Create initial migrations
-
 3. **Authentication System**
-   - Implement JWT-based authentication
-   - Create user registration endpoint
-   - Build login/logout functionality
-   - Add password hashing with bcrypt
-
 4. **Location Management**
-   - Design location data structure
-   - Create location seeding system
-   - Implement random location retrieval
-   - Add difficulty categorization
-
+5. 
 #### Android Development
 1. **Project Setup**
-   - Create Android Studio project
-   - Configure Gradle dependencies
-   - Set up MVVM architecture
-   - Implement dependency injection
-
 2. **Core UI Components**
-   - Main menu activity
-   - Authentication screens
-   - Basic game activity layout
-   - Material Design theming
-
 3. **Local Database**
-   - Set up Room database
-   - Create entity models
-   - Implement DAOs
-   - Add offline caching logic
-
 4. **Networking Layer**
-   - Configure Retrofit API service
-   - Implement authentication interceptor
-   - Add error handling
-   - Create repository pattern
-
 **Deliverables Phase 1:**
 - Working authentication system
 - Basic single-player game mode
