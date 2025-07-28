@@ -148,11 +148,15 @@ class GameRepository @Inject constructor(
         )
     }
 
-    private suspend fun updateGameScore(gameId: String, additionalScore: Int) {
+    // In GameRepository.kt - bessere Zeit-Integration
+    private suspend fun updateGameScore(gameId: String, additionalScore: Int, timeSpent: Long) {
         val game = gameDao.getGameById(gameId)
         game?.let {
+            val timeBonus = ScoreCalculator.calculateTimeBonus(timeSpent, Constants.MAX_ROUND_TIME_MS)
+            val totalScore = additionalScore + timeBonus
+
             val updatedGame = it.copy(
-                score = it.score + additionalScore,
+                score = it.score + totalScore,
                 currentRound = it.currentRound + 1,
                 isCompleted = it.currentRound >= it.totalRounds
             )
