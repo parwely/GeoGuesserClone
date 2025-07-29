@@ -3,9 +3,7 @@ package com.example.geogeusserclone
 import com.example.geogeusserclone.data.database.AppDatabase
 import com.example.geogeusserclone.data.network.ApiService
 import com.example.geogeusserclone.data.network.AuthInterceptor
-import com.example.geogeusserclone.data.repositories.GameRepository
-import com.example.geogeusserclone.data.repositories.LocationRepository
-import com.example.geogeusserclone.data.repositories.UserRepository
+import com.example.geogeusserclone.data.repositories.*
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -23,16 +21,11 @@ object RepositoryModule {
         database: AppDatabase,
         authInterceptor: AuthInterceptor
     ): UserRepository {
-        return UserRepository(apiService, database.userDao(), authInterceptor)
-    }
-
-    @Provides
-    @Singleton
-    fun provideGameRepository(
-        apiService: ApiService,
-        database: AppDatabase
-    ): GameRepository {
-        return GameRepository(apiService, database.gameDao(), database.guessDao())
+        return UserRepository(
+            apiService = apiService,
+            userDao = database.userDao(),
+            authInterceptor = authInterceptor
+        )
     }
 
     @Provides
@@ -41,6 +34,36 @@ object RepositoryModule {
         apiService: ApiService,
         database: AppDatabase
     ): LocationRepository {
-        return LocationRepository(apiService, database.locationDao())
+        return LocationRepository(
+            apiService = apiService,
+            locationDao = database.locationDao()
+        )
+    }
+
+    @Provides
+    @Singleton
+    fun provideGameRepository(
+        apiService: ApiService,
+        database: AppDatabase,
+        userRepository: UserRepository
+    ): GameRepository {
+        return GameRepository(
+            apiService = apiService,
+            gameDao = database.gameDao(),
+            guessDao = database.guessDao(),
+            userRepository = userRepository
+        )
+    }
+
+    @Provides
+    @Singleton
+    fun provideLocationCacheRepository(
+        apiService: ApiService,
+        database: AppDatabase
+    ): LocationCacheRepository {
+        return LocationCacheRepository(
+            apiService = apiService,
+            locationDao = database.locationDao()
+        )
     }
 }

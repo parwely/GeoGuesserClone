@@ -21,36 +21,70 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
+
+        // Performance Optimierungen
+        multiDexEnabled = true
+
+        // ProGuard optimierte Konfiguration
+        ndk {
+            debugSymbolLevel = "SYMBOL_TABLE"
+        }
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true // Aktiviert für bessere Performance
+            isShrinkResources = true // Entfernt unbenutzte Ressourcen
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
             buildConfigField("String", "BASE_URL", "\"https://your-app.vercel.app\"")
             buildConfigField("String", "SOCKET_URL", "\"wss://your-app.vercel.app\"")
+
+            // Performance Optimierungen für Release
+            isDebuggable = false
+            renderscriptOptimLevel = 3
         }
         debug {
             buildConfigField("String", "BASE_URL", "\"https://your-app.vercel.app\"")
             buildConfigField("String", "SOCKET_URL", "\"wss://your-app.vercel.app\"")
+
+            // Debug Performance Optimierungen
+            isMinifyEnabled = false
+            applicationIdSuffix = ".debug"
         }
     }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
+        sourceCompatibility = JavaVersion.VERSION_17 // Upgrade für bessere Performance
+        targetCompatibility = JavaVersion.VERSION_17
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
-        jvmTarget = "1.8"
+        jvmTarget = "17"
+
+        // Kotlin Compiler Optimierungen
+        freeCompilerArgs += listOf(
+            "-opt-in=androidx.compose.material3.ExperimentalMaterial3Api",
+            "-opt-in=androidx.compose.foundation.ExperimentalFoundationApi",
+            "-opt-in=kotlinx.coroutines.ExperimentalCoroutinesApi",
+            "-Xjvm-default=all", // Bessere Java Interop Performance
+            "-Xbackend-threads=4" // Parallele Compilation
+        )
     }
 
     buildFeatures {
         compose = true
         buildConfig = true
+
+        // Deaktiviere unbenutzte Features für bessere Build Performance
+        viewBinding = false
+        dataBinding = false
+        aidl = false
+        renderScript = false
+        shaders = false
     }
 
     composeOptions {
@@ -60,12 +94,39 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += "/META-INF/DEPENDENCIES"
+            excludes += "/META-INF/LICENSE"
+            excludes += "/META-INF/LICENSE.txt"
+            excludes += "/META-INF/NOTICE"
+            excludes += "/META-INF/NOTICE.txt"
+        }
+    }
 
+    // Build Performance Optimierungen
+    androidResources {
+        // generateLocaleConfig = true - Entfernt da resources.properties fehlt
+    }
+
+    // Kompilierungs-Cache Optimierungen
+    compileSdk = 35
+
+    bundle {
+        language {
+            enableSplit = true
+        }
+        density {
+            enableSplit = true
+        }
+        abi {
+            enableSplit = true
         }
     }
 }
 
 dependencies {
+    // Core Library Desugaring - MUSS ZUERST STEHEN
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
+
     // Core Android & Compose
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)

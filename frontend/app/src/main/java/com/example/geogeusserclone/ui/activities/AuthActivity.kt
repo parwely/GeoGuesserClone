@@ -6,17 +6,17 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusDirection
-import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.geogeusserclone.ui.theme.GeoGeusserCloneTheme
@@ -41,7 +41,6 @@ class AuthActivity : ComponentActivity() {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AuthScreen(
     onNavigateToMenu: () -> Unit,
@@ -49,12 +48,8 @@ fun AuthScreen(
 ) {
     val authState by authViewModel.state.collectAsState()
     var isLoginMode by remember { mutableStateOf(true) }
-    var username by remember { mutableStateOf("") }
-    var email by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    val focusManager = LocalFocusManager.current
 
-    // Navigation bei erfolgreichem Login/Registrierung
+    // Navigation bei erfolgreichem Login
     LaunchedEffect(authState.isLoggedIn) {
         if (authState.isLoggedIn) {
             onNavigateToMenu()
@@ -84,132 +79,200 @@ fun AuthScreen(
 
             Spacer(modifier = Modifier.height(48.dp))
 
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+            if (isLoginMode) {
+                LoginForm(
+                    onLogin = { email, password ->
+                        authViewModel.login(email, password)
+                    },
+                    onSwitchToRegister = { isLoginMode = false },
+                    isLoading = authState.isLoading
+                )
+            } else {
+                RegisterForm(
+                    onRegister = { username, email, password ->
+                        authViewModel.register(username, email, password)
+                    },
+                    onSwitchToLogin = { isLoginMode = true },
+                    isLoading = authState.isLoading
+                )
+            }
+
+            // Error Anzeige
+            authState.error?.let { error ->
+                Spacer(modifier = Modifier.height(16.dp))
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    )
                 ) {
                     Text(
-                        text = if (isLoginMode) "Anmelden" else "Registrieren",
-                        style = MaterialTheme.typography.headlineSmall
+                        text = error,
+                        modifier = Modifier.padding(16.dp),
+                        color = MaterialTheme.colorScheme.onErrorContainer
                     )
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    // Username field (nur bei Registrierung)
-                    if (!isLoginMode) {
-                        OutlinedTextField(
-                            value = username,
-                            onValueChange = { username = it },
-                            label = { Text("Benutzername") },
-                            modifier = Modifier.fillMaxWidth(),
-                            keyboardOptions = KeyboardOptions(
-                                imeAction = ImeAction.Next
-                            ),
-                            keyboardActions = KeyboardActions(
-                                onNext = { focusManager.moveFocus(FocusDirection.Down) }
-                            )
-                        )
-
-                        Spacer(modifier = Modifier.height(16.dp))
-                    }
-
-                    // Email field
-                    OutlinedTextField(
-                        value = email,
-                        onValueChange = { email = it },
-                        label = { Text("E-Mail") },
-                        modifier = Modifier.fillMaxWidth(),
-                        keyboardOptions = KeyboardOptions(
-                            keyboardType = KeyboardType.Email,
-                            imeAction = ImeAction.Next
-                        ),
-                        keyboardActions = KeyboardActions(
-                            onNext = { focusManager.moveFocus(FocusDirection.Down) }
-                        )
-                    )
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Password field
-                    OutlinedTextField(
-                        value = password,
-                        onValueChange = { password = it },
-                        label = { Text("Passwort") },
-                        modifier = Modifier.fillMaxWidth(),
-                        visualTransformation = PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(
-                            keyboardType = KeyboardType.Password,
-                            imeAction = ImeAction.Done
-                        ),
-                        keyboardActions = KeyboardActions(
-                            onDone = {
-                                focusManager.clearFocus()
-                                if (isLoginMode) {
-                                    authViewModel.login(email, password)
-                                } else {
-                                    authViewModel.register(username, email, password)
-                                }
-                            }
-                        )
-                    )
-
-                    // Error message
-                    authState.error?.let { error ->
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = error,
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    // Submit button
-                    Button(
-                        onClick = {
-                            if (isLoginMode) {
-                                authViewModel.login(email, password)
-                            } else {
-                                authViewModel.register(username, email, password)
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = !authState.isLoading
-                    ) {
-                        if (authState.isLoading) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(16.dp),
-                                color = MaterialTheme.colorScheme.onPrimary
-                            )
-                        } else {
-                            Text(if (isLoginMode) "Anmelden" else "Registrieren")
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Toggle button
-                    TextButton(
-                        onClick = {
-                            isLoginMode = !isLoginMode
-                            authViewModel.clearError()
-                        }
-                    ) {
-                        Text(
-                            if (isLoginMode) {
-                                "Noch kein Konto? Registrieren"
-                            } else {
-                                "Bereits ein Konto? Anmelden"
-                            }
-                        )
-                    }
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun LoginForm(
+    onLogin: (String, String) -> Unit,
+    onSwitchToRegister: () -> Unit,
+    isLoading: Boolean
+) {
+    var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var passwordVisible by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = "Anmelden",
+            style = MaterialTheme.typography.headlineSmall
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        OutlinedTextField(
+            value = email,
+            onValueChange = { email = it },
+            label = { Text("E-Mail") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+            modifier = Modifier.fillMaxWidth(),
+            enabled = !isLoading
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        OutlinedTextField(
+            value = password,
+            onValueChange = { password = it },
+            label = { Text("Passwort") },
+            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            trailingIcon = {
+                IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                    Text(
+                        text = if (passwordVisible) "👁️" else "🔒",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = !isLoading
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Button(
+            onClick = { onLogin(email, password) },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = !isLoading && email.isNotBlank() && password.isNotBlank()
+        ) {
+            if (isLoading) {
+                CircularProgressIndicator(modifier = Modifier.size(20.dp))
+            } else {
+                Text("Anmelden")
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        TextButton(
+            onClick = onSwitchToRegister,
+            enabled = !isLoading
+        ) {
+            Text("Noch kein Konto? Registrieren")
+        }
+    }
+}
+
+@Composable
+fun RegisterForm(
+    onRegister: (String, String, String) -> Unit,
+    onSwitchToLogin: () -> Unit,
+    isLoading: Boolean
+) {
+    var username by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var passwordVisible by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = "Registrieren",
+            style = MaterialTheme.typography.headlineSmall
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        OutlinedTextField(
+            value = username,
+            onValueChange = { username = it },
+            label = { Text("Benutzername") },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = !isLoading
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        OutlinedTextField(
+            value = email,
+            onValueChange = { email = it },
+            label = { Text("E-Mail") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+            modifier = Modifier.fillMaxWidth(),
+            enabled = !isLoading
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        OutlinedTextField(
+            value = password,
+            onValueChange = { password = it },
+            label = { Text("Passwort (min. 6 Zeichen)") },
+            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            trailingIcon = {
+                IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                    Text(
+                        text = if (passwordVisible) "👁️" else "🔒",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = !isLoading
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Button(
+            onClick = { onRegister(username, email, password) },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = !isLoading && username.isNotBlank() && email.isNotBlank() && password.length >= 6
+        ) {
+            if (isLoading) {
+                CircularProgressIndicator(modifier = Modifier.size(20.dp))
+            } else {
+                Text("Registrieren")
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        TextButton(
+            onClick = onSwitchToLogin,
+            enabled = !isLoading
+        ) {
+            Text("Bereits ein Konto? Anmelden")
         }
     }
 }

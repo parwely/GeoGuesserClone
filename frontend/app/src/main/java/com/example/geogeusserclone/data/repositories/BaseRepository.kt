@@ -1,32 +1,24 @@
 package com.example.geogeusserclone.data.repositories
 
-import com.example.geogeusserclone.data.network.NetworkResult
-import com.example.geogeusserclone.data.network.safeApiCall
-import retrofit2.Response
-
 abstract class BaseRepository {
 
-    protected suspend fun <T> executeNetworkCall(
-        apiCall: suspend () -> Response<T>
-    ): NetworkResult<T> {
-        return safeApiCall { apiCall() }
+    protected suspend fun <T> safeApiCall(
+        apiCall: suspend () -> T
+    ): Result<T> {
+        return try {
+            Result.success(apiCall())
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
-    protected suspend fun <T, R> executeWithFallback(
-        networkCall: suspend () -> NetworkResult<T>,
-        localCall: suspend () -> R,
-        transform: (T) -> R
-    ): R {
-        return when (val result = networkCall()) {
-            is NetworkResult.Success -> {
-                try {
-                    transform(result.data)
-                } catch (e: Exception) {
-                    localCall()
-                }
-            }
-            is NetworkResult.Error -> localCall()
-            is NetworkResult.Loading -> localCall()
+    protected fun <T> handleApiResponse(
+        response: retrofit2.Response<T>
+    ): Result<T> {
+        return if (response.isSuccessful && response.body() != null) {
+            Result.success(response.body()!!)
+        } else {
+            Result.failure(Exception("API Error: ${response.code()} ${response.message()}"))
         }
     }
 }

@@ -1,52 +1,39 @@
 package com.example.geogeusserclone.utils
 
 object Constants {
-    // Game Modes
-    const val GAME_MODE_SINGLE = "SINGLE"
-    const val GAME_MODE_MULTIPLAYER = "MULTIPLAYER"
-    const val GAME_MODE_BATTLE_ROYALE = "BATTLE_ROYALE"
+    // Network Configuration
+    const val BASE_URL = "https://api.geoguessr-clone.com/"
+    const val CONNECT_TIMEOUT = 30L
+    const val READ_TIMEOUT = 30L
+    const val WRITE_TIMEOUT = 30L
 
-    // Game Settings
-    const val DEFAULT_GAME_ROUNDS = 5
-    const val MAX_ROUND_TIME_MS = 60000L // 60 seconds
-    const val MIN_ROUND_TIME_MS = 10000L // 10 seconds
-
-    // Scoring
-    const val ROUNDS_PER_GAME = 5
-    const val MAX_SCORE_PER_ROUND = 5000
+    // Game Configuration
+    const val MAX_ROUND_TIME_MS = 120000L // 2 Minuten
     const val TIME_BONUS_MAX = 500
-    const val GUESS_TIME_LIMIT_SECONDS = 120L
-    const val PERFECT_GUESS_DISTANCE_KM = 1.0
 
-    // Map Settings
-    const val DEFAULT_ZOOM_LEVEL = 2.0
-    const val GUESS_ZOOM_LEVEL = 10.0
-    const val MIN_ZOOM_LEVEL = 1.0
-    const val MAX_ZOOM_LEVEL = 18.0
-
-    // Preferences Keys
-    const val PREF_USER_ID = "user_id"
-    const val PREF_AUTH_TOKEN = "auth_token"
-    const val PREF_SOUND_ENABLED = "sound_enabled"
-    const val PREF_VIBRATION_ENABLED = "vibration_enabled"
-
-    // Score Thresholds (in km)
+    // Score Thresholds
     const val PERFECT_DISTANCE_KM = 1.0
     const val EXCELLENT_DISTANCE_KM = 10.0
     const val GOOD_DISTANCE_KM = 50.0
     const val FAIR_DISTANCE_KM = 200.0
     const val POOR_DISTANCE_KM = 1000.0
 
-    // Database
-    const val DATABASE_NAME = "geoguessr_database"
-    const val DATABASE_VERSION = 2
+    // Cache Configuration
+    const val IMAGE_CACHE_SIZE_MB = 50L
+    const val MAP_TILE_CACHE_SIZE_MB = 100L
+    const val LOCATION_PRELOAD_COUNT = 10
 
-    // Network
-    const val BASE_URL = "http://10.0.2.2:3000/api/"
-    //oder:
-    // const val BASE_URL = "http://deine-ip:3000/api/" // Für echtes Gerät
-    const val CONNECT_TIMEOUT = 30L
-    const val READ_TIMEOUT = 30L
-    const val WRITE_TIMEOUT = 30L
+    // Performance Settings
+    const val ANIMATION_DURATION_MS = 300L
+    const val DEBOUNCE_DELAY_MS = 100L
+    const val MAP_ZOOM_MIN = 1.0
+    const val MAP_ZOOM_MAX = 19.0
 
+    // Background Work
+    const val LOCATION_PRELOAD_INTERVAL_HOURS = 2L
+    const val CACHE_CLEANUP_INTERVAL_HOURS = 24L
+
+    // UI Performance
+    const val LAZY_COLUMN_PREFETCH_COUNT = 3
+    const val IMAGE_CROSSFADE_DURATION = 200
 }
