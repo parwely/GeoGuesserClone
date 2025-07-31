@@ -37,6 +37,7 @@
     "@vercel/node": "^2.3.0",
     "axios": "^1.10.0",
     "bcryptjs": "^3.0.2",
+    "compression": "^1.8.1",
     "cors": "^2.8.5",
     "db-migrate": "^0.11.14",
     "db-migrate-pg": "^1.5.2",
@@ -46,9 +47,11 @@
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.1",
+    "node-cache": "^5.1.2",
     "pg": "^8.16.3",
     "pg-format": "^1.0.4",
     "postgis": "^1.0.5",
+    "redis": "^4.6.0",
     "socket.io": "^4.8.1"
   },
   "devDependencies": {
