@@ -28,15 +28,16 @@ import androidx.room.PrimaryKey
     ]
 )
 data class GuessEntity(
-    @PrimaryKey val id: String,
+    @PrimaryKey
+    val id: String,
     val gameId: String,
     val locationId: String,
-    val guessLat: Double,  // Geändert von guessLatitude
-    val guessLng: Double,  // Geändert von guessLongitude
-    val actualLat: Double, // Geändert von actualLatitude
-    val actualLng: Double, // Geändert von actualLongitude
-    val distance: Double, // in kilometers
+    val guessLat: Double,
+    val guessLng: Double,
+    val actualLat: Double,
+    val actualLng: Double,
+    val distance: Double,
     val score: Int,
-    val timeSpent: Long, // in milliseconds
-    val submittedAt: Long = System.currentTimeMillis() // Geändert von timestamp
+    val timeSpent: Long,
+    val submittedAt: Long = System.currentTimeMillis()
 )

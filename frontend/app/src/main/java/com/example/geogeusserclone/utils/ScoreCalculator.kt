@@ -3,11 +3,11 @@ package com.example.geogeusserclone.utils
 import androidx.compose.ui.graphics.Color
 import com.example.geogeusserclone.utils.Constants
 
-enum class ScoreRating {
-    PERFECT, EXCELLENT, GOOD, FAIR, POOR, TERRIBLE
-}
-
 object ScoreCalculator {
+
+    enum class ScoreRating {
+        PERFECT, EXCELLENT, GOOD, FAIR, POOR, TERRIBLE
+    }
 
     /**
      * Berechnet den Score basierend auf Entfernung und Zeit

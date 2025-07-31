@@ -98,19 +98,19 @@ class UserRepository @Inject constructor(
         val currentUser = userDao.getCurrentUser()
         currentUser?.let { user ->
             val updatedUser = user.copy(
-                totalScore = totalScore,
-                gamesPlayed = gamesPlayed,
-                bestScore = if (bestScore > user.bestScore) bestScore else user.bestScore,
+                totalScore = user.totalScore + totalScore,
+                gamesPlayed = user.gamesPlayed + gamesPlayed,
+                bestScore = maxOf(user.bestScore, bestScore),
                 lastLoginAt = System.currentTimeMillis()
             )
             userDao.updateUser(updatedUser)
         }
     }
 
-    private fun createOfflineUser(email: String, username: String? = null): UserEntity {
+    private fun createOfflineUser(email: String, username: String = "Offline User"): UserEntity {
         return UserEntity(
             id = UUID.randomUUID().toString(),
-            username = username ?: email.substringBefore("@"),
+            username = username,
             email = email,
             authToken = null,
             totalScore = 0,
@@ -119,5 +119,9 @@ class UserRepository @Inject constructor(
             lastLoginAt = System.currentTimeMillis(),
             createdAt = System.currentTimeMillis()
         )
+    }
+
+    fun getAllUsers(): Flow<List<UserEntity>> {
+        return userDao.getAllUsers()
     }
 }

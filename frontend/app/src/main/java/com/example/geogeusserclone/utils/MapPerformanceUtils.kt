@@ -121,8 +121,6 @@ object MapPerformanceUtils {
             overlayManager.tilesOverlay.setLoadingBackgroundColor(
                 android.graphics.Color.TRANSPARENT
             )
-
-            // Animation settings werden übersprungen da nicht alle OSMDroid Versionen diese unterstützen
         }
     }
 

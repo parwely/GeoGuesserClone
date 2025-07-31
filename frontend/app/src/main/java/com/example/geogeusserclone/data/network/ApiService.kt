@@ -7,34 +7,46 @@ import retrofit2.http.*
 
 interface ApiService {
 
-    @GET("locations/random")
-    suspend fun getRandomLocation(): Response<LocationResponse>
+    // Updated endpoints for production backend
+    @GET("api/locations/random")
+    suspend fun getRandomLocation(
+        @Query("count") count: Int = 1
+    ): Response<LocationsResponse>
 
-    @GET("locations")
+    @GET("api/locations")
     suspend fun getLocations(
         @Query("limit") limit: Int = 10
     ): Response<LocationsResponse>
 
-    @POST("auth/login")
-    suspend fun login(
-        @Body request: LoginRequest
-    ): Response<LoginResponse>
+    @GET("api/locations/{id}/streetview")
+    suspend fun getStreetViewImage(
+        @Path("id") locationId: String,
+        @Query("angle") angle: Int? = null,
+        @Query("multiple") multiple: Boolean = false
+    ): Response<okhttp3.ResponseBody>
 
-
+    // Updated auth endpoints
+    @POST("api/auth/register")
     suspend fun register(
         @Body request: RegisterRequest
     ): Response<LoginResponse>
 
-    @POST("games")
-    suspend fun createGame(
-        @Body request: CreateGameRequest
+    @POST("api/auth/login")
+    suspend fun login(
+        @Body request: LoginRequest
+    ): Response<LoginResponse>
+
+    // Updated game endpoints for single player
+    @POST("api/games/single")
+    suspend fun createSinglePlayerGame(
+        @Body request: CreateSinglePlayerGameRequest
     ): Response<GameResponse>
 
-    @POST("games/{gameId}/guess")
-    suspend fun submitGuess(
-        @Path("gameId") gameId: String,
-        @Body request: GuessRequest
-    ): Response<GuessResponse>
+    @PUT("api/games/{id}/result")
+    suspend fun submitGameResult(
+        @Path("id") gameId: String,
+        @Body request: GameResultRequest
+    ): Response<GameResultResponse>
 }
 
 data class LoginRequest(
@@ -90,4 +102,34 @@ data class GuessResponse(
     val score: Int,
     val actualLat: Double,
     val actualLng: Double
+)
+
+// New request/response models for backend integration
+data class CreateSinglePlayerGameRequest(
+    val rounds: Int = 5,
+    val gameMode: String = "single"
+)
+
+data class GameResultRequest(
+    val guesses: List<GuessResultData>,
+    val totalScore: Int,
+    val completedAt: Long
+)
+
+data class GuessResultData(
+    val locationId: String,
+    val guessLat: Double,
+    val guessLng: Double,
+    val actualLat: Double,
+    val actualLng: Double,
+    val distance: Double,
+    val score: Int,
+    val timeSpent: Long
+)
+
+data class GameResultResponse(
+    val gameId: String,
+    val finalScore: Int,
+    val rank: Int?,
+    val achievements: List<String> = emptyList()
 )

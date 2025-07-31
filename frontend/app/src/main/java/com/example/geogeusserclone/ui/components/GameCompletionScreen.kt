@@ -1,21 +1,21 @@
 package com.example.geogeusserclone.ui.components
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.geogeusserclone.data.database.entities.GameEntity
 import com.example.geogeusserclone.data.database.entities.GuessEntity
 import com.example.geogeusserclone.utils.DistanceCalculator
 import com.example.geogeusserclone.utils.ScoreCalculator
-import com.example.geogeusserclone.utils.ScoreRating
 
 @Composable
 fun GameCompletionScreen(
@@ -25,19 +25,14 @@ fun GameCompletionScreen(
     onMainMenu: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val averageScore = guesses.map { it.score }.average().toInt()
-    val averageDistance = guesses.map { it.distance }.average()
-    val bestRound = guesses.maxByOrNull { it.score }
-    val worstRound = guesses.minByOrNull { it.score }
-
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
             .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
-            // Final Score Header
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(
@@ -50,76 +45,71 @@ fun GameCompletionScreen(
                 ) {
                     Text(
                         text = "🎉",
-                        style = MaterialTheme.typography.displayMedium
-                    )
-
-                    Text(
-                        text = "Spiel beendet!",
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold
+                        style = MaterialTheme.typography.displayLarge
                     )
 
                     Spacer(modifier = Modifier.height(16.dp))
 
                     Text(
-                        text = "${game.score}",
-                        style = MaterialTheme.typography.displayLarge,
-                        color = MaterialTheme.colorScheme.primary,
+                        text = "Spiel abgeschlossen!",
+                        style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold
-                    )
-
-                    Text(
-                        text = "von ${5000 * game.totalRounds} Punkten",
-                        style = MaterialTheme.typography.titleMedium
                     )
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    LinearProgressIndicator(
-                        progress = { (game.score.toFloat() / (5000 * game.totalRounds).toFloat()) },
-                        modifier = Modifier
-                            .fillMaxWidth(0.8f)
-                            .height(8.dp),
+                    Text(
+                        text = "${game.score} Punkte",
+                        style = MaterialTheme.typography.displayMedium,
                         color = MaterialTheme.colorScheme.primary,
-                        trackColor = MaterialTheme.colorScheme.surfaceVariant
+                        fontWeight = FontWeight.Bold
                     )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    val averageDistance = if (guesses.isNotEmpty()) {
+                        guesses.sumOf { it.distance } / guesses.size
+                    } else 0.0
+
+                    Text(
+                        text = "Durchschnittliche Entfernung: ${DistanceCalculator.formatDistance(averageDistance)}",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+
+                    val bestGuess = guesses.minByOrNull { it.distance }
+                    bestGuess?.let {
+                        Text(
+                            text = "Beste Vermutung: ${DistanceCalculator.formatDistance(it.distance)}",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
                 }
             }
         }
 
         item {
-            // Performance Statistics
-            GameStatisticsCard(
-                averageScore = averageScore,
-                averageDistance = averageDistance,
-                bestRound = bestRound,
-                worstRound = worstRound
-            )
-        }
-
-        item {
             Text(
-                text = "Runden-Übersicht",
-                style = MaterialTheme.typography.titleLarge,
+                text = "Rundenergebnisse",
+                style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold
             )
         }
 
-        itemsIndexed(guesses) { index, guess ->
-            EnhancedRoundSummaryCard(
-                guess = guess,
+        items(guesses.withIndex().toList()) { (index, guess) ->
+            GuessResultCard(
                 roundNumber = index + 1,
-                isBestRound = guess.id == bestRound?.id, // Vergleiche über ID statt Objekt
-                isWorstRound = guess.id == worstRound?.id  // Vergleiche über ID statt Objekt
+                guess = guess
             )
         }
 
         item {
             Spacer(modifier = Modifier.height(16.dp))
+        }
 
+        item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 OutlinedButton(
                     onClick = onMainMenu,
@@ -132,6 +122,8 @@ fun GameCompletionScreen(
                     onClick = onPlayAgain,
                     modifier = Modifier.weight(1f)
                 ) {
+                    Icon(Icons.Default.PlayArrow, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text("Nochmal spielen")
                 }
             }
@@ -140,178 +132,103 @@ fun GameCompletionScreen(
 }
 
 @Composable
-private fun GameStatisticsCard(
-    averageScore: Int,
-    averageDistance: Double,
-    bestRound: GuessEntity?,
-    worstRound: GuessEntity?,
+private fun GuessResultCard(
+    roundNumber: Int,
+    guess: GuessEntity,
     modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-        )
+        modifier = modifier.fillMaxWidth()
     ) {
         Column(
             modifier = Modifier.padding(16.dp)
         ) {
-            Text(
-                text = "Statistiken",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Runde $roundNumber",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
 
-            Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val rating = ScoreCalculator.getScoreRating(guess.score)
+                    val stars = when (rating) {
+                        ScoreCalculator.ScoreRating.PERFECT -> 5
+                        ScoreCalculator.ScoreRating.EXCELLENT -> 4
+                        ScoreCalculator.ScoreRating.GOOD -> 3
+                        ScoreCalculator.ScoreRating.FAIR -> 2
+                        ScoreCalculator.ScoreRating.POOR -> 1
+                        ScoreCalculator.ScoreRating.TERRIBLE -> 0
+                    }
+
+                    repeat(5) { index ->
+                        Icon(
+                            Icons.Default.Star,
+                            contentDescription = null,
+                            tint = if (index < stars)
+                                MaterialTheme.colorScheme.primary
+                            else
+                                MaterialTheme.colorScheme.outline,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                StatisticItem(
-                    label = "Ø Punkte",
-                    value = "$averageScore",
-                    icon = "📊"
-                )
-
-                StatisticItem(
-                    label = "Ø Entfernung",
-                    value = DistanceCalculator.formatDistance(averageDistance),
-                    icon = "📍"
-                )
-
-                bestRound?.let {
-                    StatisticItem(
-                        label = "Beste Runde",
-                        value = "${it.score}",
-                        icon = "🏆"
-                    )
-                }
-
-                worstRound?.let {
-                    StatisticItem(
-                        label = "Schlechteste",
-                        value = "${it.score}",
-                        icon = "📉"
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun StatisticItem(
-    label: String,
-    value: String,
-    icon: String,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = icon,
-            style = MaterialTheme.typography.titleLarge
-        )
-
-        Text(
-            text = value,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary
-        )
-
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-}
-
-@Composable
-private fun EnhancedRoundSummaryCard(
-    guess: GuessEntity,
-    roundNumber: Int,
-    isBestRound: Boolean,
-    isWorstRound: Boolean,
-    modifier: Modifier = Modifier
-) {
-    val scoreRating = ScoreCalculator.getScoreRating(guess.score)
-    val scoreColor = ScoreCalculator.getScoreColor(scoreRating)
-
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = when {
-                isBestRound -> Color(0xFF4CAF50).copy(alpha = 0.1f)
-                isWorstRound -> Color(0xFFF44336).copy(alpha = 0.1f)
-                else -> scoreColor.copy(alpha = 0.1f)
-            }
-        ),
-        border = if (isBestRound || isWorstRound) {
-            BorderStroke(
-                2.dp,
-                if (isBestRound) Color(0xFF4CAF50) else Color(0xFFF44336)
-            )
-        } else null
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                if (isBestRound || isWorstRound) {
+                Column {
                     Text(
-                        text = if (isBestRound) "🏆" else "📉",
-                        style = MaterialTheme.typography.titleMedium
+                        text = "Punkte",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = guess.score.toString(),
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = ScoreCalculator.getScoreColor(
+                            ScoreCalculator.getScoreRating(guess.score)
+                        )
                     )
                 }
 
                 Column {
                     Text(
-                        text = "Runde $roundNumber",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = DistanceCalculator.formatDistance(guess.distance),
-                        style = MaterialTheme.typography.bodyMedium,
+                        text = "Entfernung",
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = getRatingText(scoreRating),
+                        text = DistanceCalculator.formatDistance(guess.distance),
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Column {
+                    Text(
+                        text = "Zeit",
                         style = MaterialTheme.typography.bodySmall,
-                        color = scoreColor
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "${guess.timeSpent / 1000}s",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Bold
                     )
                 }
             }
-
-            Text(
-                text = "${guess.score}",
-                style = MaterialTheme.typography.headlineSmall,
-                color = scoreColor,
-                fontWeight = FontWeight.Bold
-            )
         }
-    }
-}
-
-private fun getRatingText(rating: ScoreRating): String {
-    return when (rating) {
-        ScoreRating.PERFECT -> "Perfekt! 🎯"
-        ScoreRating.EXCELLENT -> "Ausgezeichnet! 🌟"
-        ScoreRating.GOOD -> "Gut gemacht! 👍"
-        ScoreRating.FAIR -> "Nicht schlecht! 👌"
-        ScoreRating.POOR -> "Verbesserungswürdig 📍"
-        ScoreRating.TERRIBLE -> "Mehr Glück beim nächsten Mal 🤞"
     }
 }

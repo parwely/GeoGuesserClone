@@ -7,6 +7,10 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountBox
+import androidx.compose.material.icons.filled.Face
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -153,9 +157,9 @@ fun LoginForm(
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             trailingIcon = {
                 IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                    Text(
-                        text = if (passwordVisible) "👁️" else "🔒",
-                        style = MaterialTheme.typography.titleMedium
+                    Icon(
+                        imageVector = if (passwordVisible) Icons.Default.AccountBox else Icons.Default.Lock,
+                        contentDescription = if (passwordVisible) "Passwort verbergen" else "Passwort anzeigen"
                     )
                 }
             },
@@ -239,9 +243,9 @@ fun RegisterForm(
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             trailingIcon = {
                 IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                    Text(
-                        text = if (passwordVisible) "👁️" else "🔒",
-                        style = MaterialTheme.typography.titleMedium
+                    Icon(
+                        imageVector = if (passwordVisible) Icons.Default.Face else Icons.Default.Lock,
+                        contentDescription = if (passwordVisible) "Passwort verbergen" else "Passwort anzeigen"
                     )
                 }
             },

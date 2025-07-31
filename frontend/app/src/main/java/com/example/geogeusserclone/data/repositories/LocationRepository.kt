@@ -26,7 +26,30 @@ class LocationRepository @Inject constructor(
                 return Result.success(unusedLocation)
             }
 
-            // Falls keine lokalen Locations, erstelle Fallback-Locations
+            // Falls keine lokalen Locations, versuche Backend
+            val response = apiService.getRandomLocation(count = 1)
+            if (response.isSuccessful) {
+                val locationsResponse = response.body()!!
+                if (locationsResponse.locations.isNotEmpty()) {
+                    val locationResponse = locationsResponse.locations.first()
+                    val locationEntity = LocationEntity(
+                        id = locationResponse.id,
+                        latitude = locationResponse.latitude,
+                        longitude = locationResponse.longitude,
+                        imageUrl = locationResponse.imageUrl,
+                        country = locationResponse.country,
+                        city = locationResponse.city,
+                        difficulty = locationResponse.difficulty,
+                        isCached = false,
+                        isUsed = true
+                    )
+
+                    locationDao.insertLocation(locationEntity)
+                    return Result.success(locationEntity)
+                }
+            }
+
+            // Fallback auf lokale Fallback-Locations
             val fallbackLocations = createFallbackLocations()
             if (fallbackLocations.isNotEmpty()) {
                 locationDao.insertLocations(fallbackLocations)
@@ -35,27 +58,7 @@ class LocationRepository @Inject constructor(
                 return Result.success(randomLocation)
             }
 
-            // Versuche online
-            val response = apiService.getRandomLocation()
-            if (response.isSuccessful) {
-                val locationResponse = response.body()!!
-                val locationEntity = LocationEntity(
-                    id = locationResponse.id,
-                    latitude = locationResponse.latitude,
-                    longitude = locationResponse.longitude,
-                    imageUrl = locationResponse.imageUrl,
-                    country = locationResponse.country,
-                    city = locationResponse.city,
-                    difficulty = locationResponse.difficulty,
-                    isCached = false,
-                    isUsed = true
-                )
-
-                locationDao.insertLocation(locationEntity)
-                Result.success(locationEntity)
-            } else {
-                Result.failure(Exception("Keine Locations verfügbar"))
-            }
+            Result.failure(Exception("Keine Locations verfügbar"))
         } catch (e: Exception) {
             Result.failure(e)
         }

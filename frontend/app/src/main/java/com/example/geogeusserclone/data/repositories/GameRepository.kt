@@ -6,7 +6,11 @@ import com.example.geogeusserclone.data.database.entities.GameEntity
 import com.example.geogeusserclone.data.database.entities.GuessEntity
 import com.example.geogeusserclone.data.network.ApiService
 import com.example.geogeusserclone.data.network.CreateGameRequest
+import com.example.geogeusserclone.data.network.CreateSinglePlayerGameRequest
 import com.example.geogeusserclone.data.network.GuessRequest
+import com.example.geogeusserclone.data.network.GameResultRequest
+import com.example.geogeusserclone.data.network.GuessResultData
+import com.example.geogeusserclone.data.network.GameResultResponse
 import com.example.geogeusserclone.utils.DistanceCalculator
 import com.example.geogeusserclone.utils.ScoreCalculator
 import kotlinx.coroutines.flow.Flow
@@ -24,12 +28,15 @@ class GameRepository @Inject constructor(
 
     suspend fun createGame(
         userId: String,
-        gameMode: String,
-        rounds: Int
+        gameMode: String = "single",
+        rounds: Int = 5
     ): Result<GameEntity> {
         return try {
-            // Versuche zuerst online zu erstellen
-            val response = apiService.createGame(CreateGameRequest(gameMode, rounds))
+            // Verwende neuen Single Player Endpoint
+            val response = apiService.createSinglePlayerGame(
+                CreateSinglePlayerGameRequest(rounds, gameMode)
+            )
+
             if (response.isSuccessful) {
                 val gameResponse = response.body()!!
                 val gameEntity = GameEntity(
@@ -117,15 +124,8 @@ class GameRepository @Inject constructor(
                 gameDao.updateGame(updatedGame)
             }
 
-            // Versuche online zu synchronisieren
-            try {
-                apiService.submitGuess(
-                    gameId,
-                    GuessRequest(locationId, guessLat, guessLng, timeSpent)
-                )
-            } catch (e: Exception) {
-                // Silent fail - Guess ist bereits lokal gespeichert
-            }
+            // Versuche online zu synchronisieren - remove this part that causes error
+            // The backend doesn't have this endpoint, so we skip it
 
             Result.success(guessEntity)
         } catch (e: Exception) {
@@ -156,6 +156,43 @@ class GameRepository @Inject constructor(
                 Result.failure(Exception("Spiel nicht gefunden"))
             }
         } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    // Neue Methode für komplettes Spiel-Ergebnis
+    suspend fun submitCompleteGameResult(
+        game: GameEntity,
+        guesses: List<GuessEntity>
+    ): Result<GameResultResponse> {
+        return try {
+            val gameResultRequest = GameResultRequest(
+                guesses = guesses.map { guess ->
+                    GuessResultData(
+                        locationId = guess.locationId,
+                        guessLat = guess.guessLat,
+                        guessLng = guess.guessLng,
+                        actualLat = guess.actualLat,
+                        actualLng = guess.actualLng,
+                        distance = guess.distance,
+                        score = guess.score,
+                        timeSpent = guess.timeSpent
+                    )
+                },
+                totalScore = game.score,
+                completedAt = System.currentTimeMillis()
+            )
+
+            val response = apiService.submitGameResult(game.id, gameResultRequest)
+
+            if (response.isSuccessful) {
+                val result = response.body()!!
+                Result.success(result)
+            } else {
+                Result.failure(Exception("Fehler beim Übermitteln des Spielergebnisses"))
+            }
+        } catch (e: Exception) {
+            // Silent fail - Spiel ist lokal gespeichert
             Result.failure(e)
         }
     }

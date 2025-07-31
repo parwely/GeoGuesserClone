@@ -1,106 +1,128 @@
 package com.example.geogeusserclone.viewmodels
 
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.geogeusserclone.data.database.entities.UserEntity
 import com.example.geogeusserclone.data.repositories.UserRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class AuthState(
-    val isLoading: Boolean = false,
     val isLoggedIn: Boolean = false,
-    val currentUser: UserEntity? = null,
-    val error: String? = null
+    val isLoading: Boolean = false,
+    val error: String? = null,
+    val currentUser: com.example.geogeusserclone.data.database.entities.UserEntity? = null
 )
 
 @HiltViewModel
 class AuthViewModel @Inject constructor(
     private val userRepository: UserRepository
-) : BaseViewModel<AuthState>(AuthState()) {
+) : ViewModel() {
+
+    private val _state = MutableStateFlow(AuthState())
+    val state: StateFlow<AuthState> = _state.asStateFlow()
 
     init {
-        checkInitialAuthStatus()
+        checkCurrentUser()
     }
 
-    private fun checkInitialAuthStatus() {
+    private fun checkCurrentUser() {
         viewModelScope.launch {
-            val currentUser = userRepository.getCurrentUser()
-            setState(
-                state.value.copy(
+            _state.value = _state.value.copy(isLoading = true)
+
+            try {
+                val currentUser = userRepository.getCurrentUser()
+                _state.value = _state.value.copy(
+                    isLoggedIn = currentUser != null,
                     currentUser = currentUser,
-                    isLoggedIn = currentUser != null
+                    isLoading = false
                 )
-            )
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(
+                    isLoading = false,
+                    error = "Fehler beim Laden des Benutzers: ${e.message}"
+                )
+            }
         }
     }
 
     fun login(email: String, password: String) {
         viewModelScope.launch {
-            setState(state.value.copy(isLoading = true, error = null))
+            _state.value = _state.value.copy(isLoading = true, error = null)
 
-            userRepository.login(email, password)
-                .onSuccess { user ->
-                    setState(state.value.copy(
-                        isLoading = false,
+            try {
+                val result = userRepository.login(email, password)
+
+                if (result.isSuccess) {
+                    val user = result.getOrNull()!!
+                    _state.value = _state.value.copy(
                         isLoggedIn = true,
                         currentUser = user,
-                        error = null
-                    ))
-                }
-                .onFailure { exception ->
-                    setState(state.value.copy(
                         isLoading = false,
-                        error = exception.message ?: "Login fehlgeschlagen"
-                    ))
+                        error = null
+                    )
+                } else {
+                    _state.value = _state.value.copy(
+                        isLoading = false,
+                        error = result.exceptionOrNull()?.message ?: "Login fehlgeschlagen"
+                    )
                 }
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(
+                    isLoading = false,
+                    error = "Netzwerkfehler: ${e.message}"
+                )
+            }
         }
     }
 
     fun register(username: String, email: String, password: String) {
-        if (username.isBlank() || email.isBlank() || password.isBlank()) {
-            setState(state.value.copy(error = "Alle Felder sind erforderlich"))
-            return
-        }
-
-        if (password.length < 6) {
-            setState(state.value.copy(error = "Passwort muss mindestens 6 Zeichen lang sein"))
-            return
-        }
-
         viewModelScope.launch {
-            setState(state.value.copy(isLoading = true, error = null))
+            _state.value = _state.value.copy(isLoading = true, error = null)
 
-            userRepository.register(username, email, password)
-                .onSuccess { user ->
-                    setState(state.value.copy(
-                        isLoading = false,
+            try {
+                val result = userRepository.register(username, email, password)
+
+                if (result.isSuccess) {
+                    val user = result.getOrNull()!!
+                    _state.value = _state.value.copy(
                         isLoggedIn = true,
                         currentUser = user,
-                        error = null
-                    ))
-                }
-                .onFailure { exception ->
-                    setState(state.value.copy(
                         isLoading = false,
-                        error = exception.message ?: "Registrierung fehlgeschlagen"
-                    ))
+                        error = null
+                    )
+                } else {
+                    _state.value = _state.value.copy(
+                        isLoading = false,
+                        error = result.exceptionOrNull()?.message ?: "Registrierung fehlgeschlagen"
+                    )
                 }
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(
+                    isLoading = false,
+                    error = "Netzwerkfehler: ${e.message}"
+                )
+            }
         }
     }
 
     fun logout() {
         viewModelScope.launch {
-            userRepository.logout()
-            setState(state.value.copy(
-                isLoggedIn = false,
-                currentUser = null,
-                error = null
-            ))
+            try {
+                userRepository.logout()
+                _state.value = AuthState() // Reset to initial state
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(
+                    error = "Fehler beim Abmelden: ${e.message}"
+                )
+            }
         }
     }
 
     fun clearError() {
-        setState(state.value.copy(error = null))
+        _state.value = _state.value.copy(error = null)
     }
 }
