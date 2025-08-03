@@ -23,26 +23,8 @@
 ### Phase 2: Core Game Features (Week 3-4)
 
 #### Game Logic Implementation
-1. **Single Player Mode**
-2. **Scoring System**
-   ```kotlin
-   object ScoreCalculator {
-       fun calculate(distanceKm: Double): Int {
-           return when {
-               distanceKm <= 1 -> 5000
-               distanceKm <= 10 -> (5000 - (distanceKm - 1) * 400).toInt()
-               distanceKm <= 100 -> (1400 - (distanceKm - 10) * 10).toInt()
-               else -> maxOf(0, (500 - (distanceKm - 100) * 2).toInt())
-           }
-       }
-   }
-   ```
-3. **Game State Management**
 
 #### UI/UX Development
-1. **Street View Component**
-2. **Map Interface**
-3. **Score Display**
 
 **Deliverables Phase 2:**
 - Complete single-player experience
