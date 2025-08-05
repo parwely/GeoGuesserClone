@@ -60,6 +60,7 @@
     "@types/node": "^24.0.15",
     "jest": "^30.0.4",
     "nodemon": "^3.1.10",
+    "socket.io-client": "^4.8.1",
     "supertest": "^7.1.3"
   }
 }

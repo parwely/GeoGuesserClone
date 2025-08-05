@@ -4,9 +4,11 @@ const helmet = require("helmet");
 const morgan = require("morgan");
 const rateLimit = require("express-rate-limit");
 const compression = require("compression");
+const { createServer } = require("http");
 require("dotenv").config();
 
 const app = express();
+const server = createServer(app);
 const PORT = process.env.PORT || 3000;
 
 // Compression middleware - should be early in the stack
@@ -52,10 +54,16 @@ app.get("/", (req, res) => {
     message: "GeoGuessr Clone API",
     version: "1.0.0",
     status: "active",
+    features: ["Single Player", "Battle Royale", "Real-time Multiplayer"],
     endpoints: {
-      auth: "/api/auth", // Fixed: was '/routes/auth'
-      locations: "/api/locations", // Fixed: was '/routes/locations'
-      games: "/api/games", // Fixed: was '/routes/games'
+      auth: "/api/auth",
+      locations: "/api/locations",
+      games: "/api/games",
+      battleRoyale: "/api/battle-royale",
+    },
+    realtime: {
+      socketio: "✅ Available",
+      battleRoyale: "✅ Ready",
     },
   });
 });
@@ -66,6 +74,8 @@ app.get("/health", async (req, res) => {
   const startTime = Date.now();
   const database = require("./database/connection");
   const cacheService = require("./services/cacheService");
+  const socketService = require("./services/socketService");
+  const battleRoyaleManager = require("./services/battleRoyaleService");
 
   try {
     // Test database connection
@@ -83,6 +93,10 @@ app.get("/health", async (req, res) => {
         total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024),
       },
       database_pool: database.getPoolStats(),
+      realtime: {
+        sockets: socketService.getStats(),
+        battleRoyale: battleRoyaleManager.getStats(),
+      },
     };
 
     res.json(health);
@@ -115,6 +129,7 @@ try {
   app.use("/api/auth", require("./routes/auth"));
   app.use("/api/locations", require("./routes/locations"));
   app.use("/api/games", require("./routes/games"));
+  app.use("/api/battle-royale", require("./routes/battleRoyale"));
 } catch (error) {
   console.error("Error loading routes:", error.message);
   process.exit(1);
@@ -142,11 +157,19 @@ app.use("*", (req, res) => {
 });
 
 if (require.main === module) {
-  app.listen(PORT, () => {
+  // Initialize Socket.IO
+  const socketService = require("./services/socketService");
+  socketService.initialize(server);
+
+  server.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
     console.log(`📡 API URL: http://localhost:${PORT}`);
     console.log(`🏥 Health check: http://localhost:${PORT}/health`);
+    console.log(`🔌 Socket.IO server ready for real-time connections`);
+    console.log(
+      `⚔️ Battle Royale service: http://localhost:${PORT}/api/battle-royale`
+    );
   });
 }
 
-module.exports = app;
+module.exports = { app, server };
