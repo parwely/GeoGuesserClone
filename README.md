@@ -2,8 +2,6 @@
 
 ## Project Overview
 
-A comprehensive GeoGuessr Android application featuring real-time multiplayer battles, challenge system, and global leaderboards. Built with Node.js backend and PostgreSQL database, optimized for small groups (≤5 players) using free infrastructure.
-
 **Target Specifications:**
 - Android 8.0+ (API Level 26+)
 - 5 concurrent users maximum
