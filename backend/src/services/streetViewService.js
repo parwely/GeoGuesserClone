@@ -62,7 +62,7 @@ class StreetViewService {
   getDirectionName(heading) {
     const directions = [
       "North",
-      "Northeast",
+      "Northeast", 
       "East",
       "Southeast",
       "South",

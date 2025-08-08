@@ -34,27 +34,50 @@ class GameRepository @Inject constructor(
         return try {
             // Verwende neuen Single Player Endpoint
             val response = apiService.createSinglePlayerGame(
-                CreateSinglePlayerGameRequest(rounds, gameMode)
+                CreateSingleGameRequest(
+                    difficulty = 2,
+                    category = "urban",
+                    rounds = rounds
+                )
             )
 
             if (response.isSuccessful) {
                 val gameResponse = response.body()!!
-                val gameEntity = GameEntity(
-                    id = gameResponse.id,
-                    userId = userId,
-                    gameMode = gameMode,
-                    totalRounds = rounds,
-                    currentRound = 1,
-                    score = 0,
-                    isCompleted = false,
-                    createdAt = System.currentTimeMillis(),
-                    startedAt = System.currentTimeMillis()
-                )
-                gameDao.insertGame(gameEntity)
-                Result.success(gameEntity)
-            } else {
-                createOfflineGame(userId, gameMode, rounds)
+                if (gameResponse.success) {
+                    val gameEntity = GameEntity(
+                        id = gameResponse.data.gameId,
+                        userId = userId,
+                        gameMode = gameMode,
+                        totalRounds = rounds,
+                        currentRound = 1,
+                        score = 0,
+                        isCompleted = false,
+                        createdAt = System.currentTimeMillis(),
+                        startedAt = System.currentTimeMillis()
+                    )
+                    gameDao.insertGame(gameEntity)
+
+                    // Speichere die Locations aus dem Backend
+                    val locationEntities = gameResponse.data.locations.map { backendLocation ->
+                        LocationEntity(
+                            id = backendLocation.id,
+                            latitude = backendLocation.coordinates.latitude,
+                            longitude = backendLocation.coordinates.longitude,
+                            imageUrl = backendLocation.imageUrls.firstOrNull() ?: "",
+                            country = backendLocation.country,
+                            city = backendLocation.city,
+                            difficulty = backendLocation.difficulty,
+                            isCached = true,
+                            isUsed = false
+                        )
+                    }
+                    locationDao.insertLocations(locationEntities)
+
+                    return Result.success(gameEntity)
+                }
             }
+            // Fallback für Offline-Modus
+            createOfflineGame(userId, gameMode, rounds)
         } catch (e: Exception) {
             // Fallback für Offline-Modus
             createOfflineGame(userId, gameMode, rounds)
@@ -166,21 +189,23 @@ class GameRepository @Inject constructor(
         guesses: List<GuessEntity>
     ): Result<GameResultResponse> {
         return try {
-            val gameResultRequest = GameResultRequest(
-                guesses = guesses.map { guess ->
-                    GuessResultData(
+            val gameResultRequest = GameResultSubmissionRequest(
+                totalScore = game.score,
+                totalDistance = guesses.sumOf { it.distance },
+                accuracy = calculateAccuracy(guesses),
+                timeTaken = game.duration ?: 0L,
+                roundsData = guesses.map { guess ->
+                    RoundData(
                         locationId = guess.locationId,
-                        guessLat = guess.guessLat,
-                        guessLng = guess.guessLng,
-                        actualLat = guess.actualLat,
-                        actualLng = guess.actualLng,
+                        guessLatitude = guess.guessLat,
+                        guessLongitude = guess.guessLng,
+                        actualLatitude = guess.actualLat,
+                        actualLongitude = guess.actualLng,
                         distance = guess.distance,
                         score = guess.score,
                         timeSpent = guess.timeSpent
                     )
-                },
-                totalScore = game.score,
-                completedAt = System.currentTimeMillis()
+                }
             )
 
             val response = apiService.submitGameResult(game.id, gameResultRequest)
@@ -194,6 +219,20 @@ class GameRepository @Inject constructor(
         } catch (e: Exception) {
             // Silent fail - Spiel ist lokal gespeichert
             Result.failure(e)
+        }
+    }
+
+    private fun calculateAccuracy(guesses: List<GuessEntity>): Double {
+        if (guesses.isEmpty()) return 0.0
+
+        val averageDistance = guesses.sumOf { it.distance } / guesses.size
+        return when {
+            averageDistance <= 1.0 -> 100.0
+            averageDistance <= 10.0 -> 90.0
+            averageDistance <= 50.0 -> 80.0
+            averageDistance <= 200.0 -> 70.0
+            averageDistance <= 1000.0 -> 50.0
+            else -> 20.0
         }
     }
 

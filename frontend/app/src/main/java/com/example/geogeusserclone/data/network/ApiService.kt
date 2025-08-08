@@ -1,56 +1,71 @@
 package com.example.geogeusserclone.data.network
 
-import com.example.geogeusserclone.data.network.LocationResponse
-import com.example.geogeusserclone.data.network.LocationsResponse
 import retrofit2.Response
 import retrofit2.http.*
 
 interface ApiService {
 
-    // Updated endpoints for production backend
-    @GET("api/locations/random")
-    suspend fun getRandomLocation(
-        @Query("count") count: Int = 1
-    ): Response<LocationsResponse>
-
-    @GET("api/locations")
-    suspend fun getLocations(
-        @Query("limit") limit: Int = 10
-    ): Response<LocationsResponse>
-
-    @GET("api/locations/{id}/streetview")
-    suspend fun getStreetViewImage(
-        @Path("id") locationId: String,
-        @Query("angle") angle: Int? = null,
-        @Query("multiple") multiple: Boolean = false
-    ): Response<okhttp3.ResponseBody>
-
-    // Updated auth endpoints
-    @POST("api/auth/register")
+    // Authentication Endpoints
+    @POST("auth/register")
     suspend fun register(
         @Body request: RegisterRequest
-    ): Response<LoginResponse>
+    ): Response<AuthResponse>
 
-    @POST("api/auth/login")
+    @POST("auth/login")
     suspend fun login(
         @Body request: LoginRequest
-    ): Response<LoginResponse>
+    ): Response<AuthResponse>
 
-    // Updated game endpoints for single player
-    @POST("api/games/single")
+    @POST("auth/refresh")
+    suspend fun refreshToken(): Response<TokenResponse>
+
+    @POST("auth/logout")
+    suspend fun logout(): Response<MessageResponse>
+
+    // Location Endpoints
+    @GET("locations/random")
+    suspend fun getRandomLocations(
+        @Query("count") count: Int = 5,
+        @Query("difficulty") difficulty: Int? = null,
+        @Query("category") category: String? = null
+    ): Response<LocationsResponse>
+
+    @GET("locations/{id}")
+    suspend fun getLocationById(
+        @Path("id") locationId: Int
+    ): Response<LocationResponse>
+
+    @GET("locations/{id}/streetview")
+    suspend fun getStreetView(
+        @Path("id") locationId: Int,
+        @Query("heading") heading: Int? = null,
+        @Query("multiple") multiple: Boolean = false,
+        @Query("responsive") responsive: Boolean = false
+    ): Response<StreetViewResponse>
+
+    @GET("locations/stats/overview")
+    suspend fun getLocationStats(): Response<StatsResponse>
+
+    // Game Endpoints
+    @POST("games/single")
     suspend fun createSinglePlayerGame(
-        @Body request: CreateSinglePlayerGameRequest
-    ): Response<GameResponse>
+        @Body request: GameCreateRequest
+    ): Response<GameCreateResponse>
 
-    @PUT("api/games/{id}/result")
+    @PUT("games/{gameId}/result")
     suspend fun submitGameResult(
-        @Path("id") gameId: String,
+        @Path("gameId") gameId: Int,
         @Body request: GameResultRequest
     ): Response<GameResultResponse>
+
+    // Health Check
+    @GET("health")
+    suspend fun getHealth(): Response<HealthResponse>
 }
 
+// Auth Models
 data class LoginRequest(
-    val email: String,
+    val usernameOrEmail: String,
     val password: String
 )
 
@@ -60,13 +75,19 @@ data class RegisterRequest(
     val password: String
 )
 
-data class LoginResponse(
-    val token: String,
-    val user: UserResponse
+data class AuthResponse(
+    val success: Boolean,
+    val data: AuthData
 )
 
-data class UserResponse(
-    val id: String,
+data class AuthData(
+    val user: BackendUser,
+    val token: String,
+    val expiresIn: String = "7d"
+)
+
+data class BackendUser(
+    val id: Int,
     val username: String,
     val email: String,
     val totalScore: Int = 0,
@@ -74,62 +95,152 @@ data class UserResponse(
     val bestScore: Int = 0
 )
 
-data class CreateGameRequest(
-    val gameMode: String,
+data class TokenResponse(
+    val success: Boolean,
+    val data: TokenData
+)
+
+data class TokenData(
+    val token: String,
+    val expiresIn: String
+)
+
+data class MessageResponse(
+    val success: Boolean,
+    val message: String
+)
+
+// Location Models
+data class LocationsResponse(
+    val success: Boolean,
+    val data: LocationsData
+)
+
+data class LocationsData(
+    val count: Int,
+    val locations: List<BackendLocation>
+)
+
+data class LocationResponse(
+    val success: Boolean,
+    val data: LocationDetailData
+)
+
+data class LocationDetailData(
+    val location: BackendLocation
+)
+
+data class BackendLocation(
+    val id: Int,
+    val name: String? = null,
+    val country: String,
+    val city: String,
+    val coordinates: Coordinates,
+    val difficulty: Int,
+    val difficultyName: String,
+    val category: String,
+    val imageUrls: List<String> = emptyList(),
+    val hints: Map<String, Any> = emptyMap(),
+    val viewCount: Int = 0
+)
+
+data class Coordinates(
+    val latitude: Double,
+    val longitude: Double
+)
+
+data class StreetViewResponse(
+    val success: Boolean,
+    val data: StreetViewData
+)
+
+data class StreetViewData(
+    val location: StreetViewLocation,
+    val streetViewUrl: String? = null,
+    val streetViewUrls: Any? = null // Kann Map oder Array sein je nach responsive Parameter
+)
+
+data class StreetViewLocation(
+    val id: Int,
+    val coordinates: Coordinates
+)
+
+// Game Models
+data class GameCreateRequest(
+    val difficulty: Int = 2,
+    val category: String = "urban",
+    val rounds: Int = 5
+)
+
+data class GameCreateResponse(
+    val success: Boolean,
+    val data: GameCreateData
+)
+
+data class GameCreateData(
+    val gameId: Int,
+    val locations: List<BackendLocation>,
+    val settings: GameSettings,
+    val createdAt: String
+)
+
+data class GameSettings(
+    val difficulty: Int,
+    val category: String,
     val rounds: Int
 )
 
-data class GameResponse(
-    val id: String,
-    val gameMode: String,
-    val totalRounds: Int,
-    val currentRound: Int,
-    val score: Int,
-    val isCompleted: Boolean,
-    val createdAt: Long
-)
-
-data class GuessRequest(
-    val locationId: String,
-    val guessLat: Double,
-    val guessLng: Double,
-    val timeSpent: Long
-)
-
-data class GuessResponse(
-    val id: String,
-    val distance: Double,
-    val score: Int,
-    val actualLat: Double,
-    val actualLng: Double
-)
-
-// New request/response models for backend integration
-data class CreateSinglePlayerGameRequest(
-    val rounds: Int = 5,
-    val gameMode: String = "single"
-)
-
 data class GameResultRequest(
-    val guesses: List<GuessResultData>,
     val totalScore: Int,
-    val completedAt: Long
+    val totalDistance: Double,
+    val accuracy: Double,
+    val timeTaken: Long,
+    val roundsData: List<RoundData>
 )
 
-data class GuessResultData(
-    val locationId: String,
-    val guessLat: Double,
-    val guessLng: Double,
-    val actualLat: Double,
-    val actualLng: Double,
+data class RoundData(
+    val locationId: Int,
+    val guessLatitude: Double,
+    val guessLongitude: Double,
+    val actualLatitude: Double,
+    val actualLongitude: Double,
     val distance: Double,
     val score: Int,
     val timeSpent: Long
 )
 
 data class GameResultResponse(
-    val gameId: String,
-    val finalScore: Int,
-    val rank: Int?,
-    val achievements: List<String> = emptyList()
+    val success: Boolean,
+    val data: GameResultData
+)
+
+data class GameResultData(
+    val resultId: Int,
+    val gameId: Int,
+    val totalScore: Int,
+    val submittedAt: String
+)
+
+// Stats Models
+data class StatsResponse(
+    val success: Boolean,
+    val data: StatsData
+)
+
+data class StatsData(
+    val stats: LocationStats
+)
+
+data class LocationStats(
+    val total: Int,
+    val difficulties: Map<String, Int>,
+    val categories: Map<String, Int>
+)
+
+// Health Models
+data class HealthResponse(
+    val status: String,
+    val timestamp: String,
+    val uptime: Long,
+    val database: String
 )

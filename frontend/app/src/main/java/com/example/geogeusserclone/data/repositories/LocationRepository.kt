@@ -3,6 +3,7 @@ package com.example.geogeusserclone.data.repositories
 import com.example.geogeusserclone.data.database.dao.LocationDao
 import com.example.geogeusserclone.data.database.entities.LocationEntity
 import com.example.geogeusserclone.data.network.ApiService
+import com.example.geogeusserclone.data.network.MapillaryApiService
 import com.example.geogeusserclone.data.network.NetworkResult
 import com.example.geogeusserclone.utils.Constants
 import kotlinx.coroutines.flow.Flow
@@ -14,6 +15,7 @@ import javax.inject.Singleton
 @Singleton
 class LocationRepository @Inject constructor(
     private val apiService: ApiService,
+    private val mapillaryApiService: MapillaryApiService,
     private val locationDao: LocationDao
 ) : BaseRepository() {
 
@@ -21,37 +23,36 @@ class LocationRepository @Inject constructor(
 
     suspend fun getRandomLocation(): Result<LocationEntity> {
         return try {
-            // 1. Versuche zuerst eine unbenutzte lokale Location zu finden
+            // 1. Versuche zuerst lokale unbenutzte Location
             val unusedLocation = locationDao.getRandomUnusedLocation()
             if (unusedLocation != null) {
                 locationDao.markLocationAsUsed(unusedLocation.id)
                 return Result.success(unusedLocation)
             }
 
-            // 2. Wenn keine lokalen Locations vorhanden: Erstelle SOFORT Fallback-Locations
+            // 2. Versuche dein Google Maps Backend
+            val backendResult = getLocationFromBackend()
+            if (backendResult.isSuccess) {
+                return backendResult
+            }
+
+            // 3. Fallback auf Mapillary (nur wenn Backend nicht verfügbar)
+            val mapillaryResult = getLocationFromMapillary()
+            if (mapillaryResult.isSuccess) {
+                return mapillaryResult
+            }
+
+            // 4. Ultimate Fallback: Erstelle Offline-Locations
             val fallbackLocations = createFallbackLocations()
             locationDao.insertLocations(fallbackLocations)
-
-            // 3. Wähle eine zufällige Fallback-Location
             val randomLocation = fallbackLocations.random()
             locationDao.markLocationAsUsed(randomLocation.id)
 
             return Result.success(randomLocation)
 
         } catch (e: Exception) {
-            // Fallback: Erstelle mindestens eine Location für den Notfall
-            val emergencyLocation = LocationEntity(
-                id = "emergency_paris",
-                latitude = 48.8566,
-                longitude = 2.3522,
-                imageUrl = "https://images.unsplash.com/photo-1502602898536-47ad22581b52?w=800",
-                country = "France",
-                city = "Paris",
-                difficulty = 2,
-                isCached = true,
-                isUsed = false
-            )
-
+            // Emergency Fallback
+            val emergencyLocation = createEmergencyLocation()
             try {
                 locationDao.insertLocation(emergencyLocation)
                 locationDao.markLocationAsUsed(emergencyLocation.id)
@@ -60,6 +61,137 @@ class LocationRepository @Inject constructor(
                 Result.failure(Exception("Kritischer Fehler: Kann keine Location laden"))
             }
         }
+    }
+
+    private suspend fun getLocationFromBackend(): Result<LocationEntity> {
+        return try {
+            val response = withTimeoutOrNull(Constants.BACKEND_FALLBACK_DELAY_MS) {
+                apiService.getRandomLocations(count = 1, difficulty = 2, category = "urban")
+            }
+
+            if (response?.isSuccessful == true) {
+                val locationsResponse = response.body()!!
+                if (locationsResponse.success && locationsResponse.data.locations.isNotEmpty()) {
+                    val backendLocation = locationsResponse.data.locations.first()
+
+                    // Hole Street View URL für diese Location
+                    val streetViewResult = getStreetViewForLocation(backendLocation.id)
+                    val streetViewUrl = streetViewResult.getOrNull() ?: backendLocation.imageUrls.firstOrNull() ?: ""
+
+                    val locationEntity = LocationEntity(
+                        id = backendLocation.id,
+                        latitude = backendLocation.coordinates.latitude,
+                        longitude = backendLocation.coordinates.longitude,
+                        imageUrl = streetViewUrl,
+                        country = backendLocation.country,
+                        city = backendLocation.city,
+                        difficulty = backendLocation.difficulty,
+                        isCached = true,
+                        isUsed = false
+                    )
+
+                    locationDao.insertLocation(locationEntity)
+                    locationDao.markLocationAsUsed(locationEntity.id)
+                    return Result.success(locationEntity)
+                }
+            }
+            Result.failure(Exception("Backend nicht verfügbar"))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    private suspend fun getStreetViewForLocation(locationId: String): Result<String> {
+        return try {
+            val response = apiService.getStreetViewImage(
+                locationId = locationId,
+                responsive = true
+            )
+
+            if (response.isSuccessful) {
+                val streetViewResponse = response.body()!!
+                if (streetViewResponse.success) {
+                    val streetViewUrl = streetViewResponse.data.streetViewUrl
+                    if (!streetViewUrl.isNullOrEmpty()) {
+                        Result.success(streetViewUrl)
+                    } else {
+                        Result.failure(Exception("Keine Street View URL"))
+                    }
+                } else {
+                    Result.failure(Exception("Street View Anfrage fehlgeschlagen"))
+                }
+            } else {
+                Result.failure(Exception("Street View API Fehler"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    private suspend fun getLocationFromMapillary(): Result<LocationEntity> {
+        return try {
+            // Mapillary Fallback Logic (vereinfacht)
+            val fallbackLocations = createFallbackLocationsWithMapillary()
+            if (fallbackLocations.isNotEmpty()) {
+                locationDao.insertLocations(fallbackLocations)
+                val randomLocation = fallbackLocations.random()
+                locationDao.markLocationAsUsed(randomLocation.id)
+                Result.success(randomLocation)
+            } else {
+                Result.failure(Exception("Mapillary nicht verfügbar"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun preloadLocations() {
+        try {
+            // Preload von deinem Backend (Google Maps)
+            val response = withTimeoutOrNull(Constants.BACKEND_FALLBACK_DELAY_MS) {
+                apiService.getRandomLocations(count = 10, difficulty = 2)
+            }
+
+            if (response?.isSuccessful == true) {
+                val locationsResponse = response.body()!!
+                if (locationsResponse.success) {
+                    val locationEntities = locationsResponse.data.locations.map { backendLocation ->
+                        // Hole Street View URL für jede Location
+                        val streetViewUrl = getStreetViewForLocation(backendLocation.id).getOrNull()
+                            ?: backendLocation.imageUrls.firstOrNull()
+                            ?: ""
+
+                        LocationEntity(
+                            id = backendLocation.id,
+                            latitude = backendLocation.coordinates.latitude,
+                            longitude = backendLocation.coordinates.longitude,
+                            imageUrl = streetViewUrl,
+                            country = backendLocation.country,
+                            city = backendLocation.city,
+                            difficulty = backendLocation.difficulty,
+                            isCached = true,
+                            isUsed = false
+                        )
+                    }
+                    locationDao.insertLocations(locationEntities)
+                    return
+                }
+            }
+
+            // Fallback: Lade Standard-Locations falls Backend nicht verfügbar
+            val fallbackLocations = createFallbackLocations()
+            locationDao.insertLocations(fallbackLocations)
+
+        } catch (e: Exception) {
+            // Stille Fallback-Behandlung
+            val fallbackLocations = createFallbackLocations()
+            locationDao.insertLocations(fallbackLocations)
+        }
+    }
+
+    private suspend fun createFallbackLocationsWithMapillary(): List<LocationEntity> {
+        // Vereinfachte Mapillary Integration als Fallback
+        return createFallbackLocations() // Für jetzt verwenden wir die statischen Fallbacks
     }
 
     private fun createFallbackLocations(): List<LocationEntity> {
@@ -155,42 +287,18 @@ class LocationRepository @Inject constructor(
         )
     }
 
-    suspend fun preloadLocations() {
-        try {
-            if (!Constants.ENABLE_OFFLINE_MODE) {
-                val response = withTimeoutOrNull(Constants.OFFLINE_FALLBACK_DELAY_MS) {
-                    apiService.getLocations(50)
-                }
-
-                if (response?.isSuccessful == true) {
-                    val locationsResponse = response.body()!!
-                    val locationEntities = locationsResponse.locations.map { location ->
-                        LocationEntity(
-                            id = location.id,
-                            latitude = location.latitude,
-                            longitude = location.longitude,
-                            imageUrl = location.imageUrl,
-                            country = location.country,
-                            city = location.city,
-                            difficulty = location.difficulty,
-                            isCached = true,
-                            isUsed = false
-                        )
-                    }
-                    locationDao.insertLocations(locationEntities)
-                    return
-                }
-            }
-
-            // Fallback: Lade Standard-Locations
-            val fallbackLocations = createFallbackLocations()
-            locationDao.insertLocations(fallbackLocations)
-
-        } catch (e: Exception) {
-            // Stille Fallback-Behandlung
-            val fallbackLocations = createFallbackLocations()
-            locationDao.insertLocations(fallbackLocations)
-        }
+    private fun createEmergencyLocation(): LocationEntity {
+        return LocationEntity(
+            id = "emergency_paris",
+            latitude = 48.8566,
+            longitude = 2.3522,
+            imageUrl = "https://images.unsplash.com/photo-1502602898536-47ad22581b52?w=800",
+            country = "France",
+            city = "Paris",
+            difficulty = 2,
+            isCached = true,
+            isUsed = false
+        )
     }
 
     suspend fun resetLocationUsage() {
@@ -201,7 +309,7 @@ class LocationRepository @Inject constructor(
 
     suspend fun testBackendConnection(): Result<Boolean> {
         return try {
-            val response = apiService.getLocations(1) // Teste mit nur einer Location
+            val response = apiService.healthCheck()
             if (response.isSuccessful) {
                 Result.success(true)
             } else {
