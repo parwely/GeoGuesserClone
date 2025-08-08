@@ -1,7 +1,5 @@
 package com.example.geogeusserclone.data.network
 
-import com.example.geogeusserclone.BuildConfig
-
 object NetworkConfig {
     // Android Emulator
     const val EMULATOR_BASE_URL = "http://10.0.2.2:3000/api/"
@@ -12,12 +10,7 @@ object NetworkConfig {
     // Production (falls vorhanden)
     const val PROD_BASE_URL = "https://your-domain.com/api/"
 
-    val BASE_URL = if (BuildConfig.DEBUG) {
-        EMULATOR_BASE_URL // Für Android Emulator
-        // LOCAL_BASE_URL // Uncomment für echtes Gerät
-    } else {
-        PROD_BASE_URL
-    }
+    val BASE_URL = EMULATOR_BASE_URL // Verwende Emulator URL direkt
 
     // Timeout-Konfiguration
     const val CONNECT_TIMEOUT = 30L

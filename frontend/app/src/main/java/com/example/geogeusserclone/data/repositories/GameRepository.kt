@@ -2,15 +2,11 @@ package com.example.geogeusserclone.data.repositories
 
 import com.example.geogeusserclone.data.database.dao.GameDao
 import com.example.geogeusserclone.data.database.dao.GuessDao
+import com.example.geogeusserclone.data.database.dao.LocationDao
 import com.example.geogeusserclone.data.database.entities.GameEntity
 import com.example.geogeusserclone.data.database.entities.GuessEntity
-import com.example.geogeusserclone.data.network.ApiService
-import com.example.geogeusserclone.data.network.CreateGameRequest
-import com.example.geogeusserclone.data.network.CreateSinglePlayerGameRequest
-import com.example.geogeusserclone.data.network.GuessRequest
-import com.example.geogeusserclone.data.network.GameResultRequest
-import com.example.geogeusserclone.data.network.GuessResultData
-import com.example.geogeusserclone.data.network.GameResultResponse
+import com.example.geogeusserclone.data.database.entities.LocationEntity
+import com.example.geogeusserclone.data.network.*
 import com.example.geogeusserclone.utils.DistanceCalculator
 import com.example.geogeusserclone.utils.ScoreCalculator
 import kotlinx.coroutines.flow.Flow
@@ -23,6 +19,7 @@ class GameRepository @Inject constructor(
     private val apiService: ApiService,
     private val gameDao: GameDao,
     private val guessDao: GuessDao,
+    private val locationDao: LocationDao,
     private val userRepository: UserRepository
 ) : BaseRepository() {
 
@@ -32,9 +29,9 @@ class GameRepository @Inject constructor(
         rounds: Int = 5
     ): Result<GameEntity> {
         return try {
-            // Verwende neuen Single Player Endpoint
+            // Verwende Backend API
             val response = apiService.createSinglePlayerGame(
-                CreateSingleGameRequest(
+                GameCreateRequest(
                     difficulty = 2,
                     category = "urban",
                     rounds = rounds
@@ -45,7 +42,7 @@ class GameRepository @Inject constructor(
                 val gameResponse = response.body()!!
                 if (gameResponse.success) {
                     val gameEntity = GameEntity(
-                        id = gameResponse.data.gameId,
+                        id = gameResponse.data.gameId.toString(), // Convert Int to String
                         userId = userId,
                         gameMode = gameMode,
                         totalRounds = rounds,
@@ -60,7 +57,7 @@ class GameRepository @Inject constructor(
                     // Speichere die Locations aus dem Backend
                     val locationEntities = gameResponse.data.locations.map { backendLocation ->
                         LocationEntity(
-                            id = backendLocation.id,
+                            id = backendLocation.id.toString(), // Convert Int to String
                             latitude = backendLocation.coordinates.latitude,
                             longitude = backendLocation.coordinates.longitude,
                             imageUrl = backendLocation.imageUrls.firstOrNull() ?: "",
@@ -189,14 +186,14 @@ class GameRepository @Inject constructor(
         guesses: List<GuessEntity>
     ): Result<GameResultResponse> {
         return try {
-            val gameResultRequest = GameResultSubmissionRequest(
+            val gameResultRequest = GameResultRequest(
                 totalScore = game.score,
                 totalDistance = guesses.sumOf { it.distance },
                 accuracy = calculateAccuracy(guesses),
                 timeTaken = game.duration ?: 0L,
                 roundsData = guesses.map { guess ->
                     RoundData(
-                        locationId = guess.locationId,
+                        locationId = guess.locationId.toInt(), // Convert String to Int
                         guessLatitude = guess.guessLat,
                         guessLongitude = guess.guessLng,
                         actualLatitude = guess.actualLat,
@@ -208,7 +205,7 @@ class GameRepository @Inject constructor(
                 }
             )
 
-            val response = apiService.submitGameResult(game.id, gameResultRequest)
+            val response = apiService.submitGameResult(game.id.toInt(), gameResultRequest)
 
             if (response.isSuccessful) {
                 val result = response.body()!!

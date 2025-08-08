@@ -3,6 +3,7 @@ package com.example.geogeusserclone
 import android.content.Context
 import com.example.geogeusserclone.data.network.ApiService
 import com.example.geogeusserclone.data.network.AuthInterceptor
+import com.example.geogeusserclone.data.network.TokenManager
 import com.example.geogeusserclone.utils.Constants
 import dagger.Module
 import dagger.Provides
@@ -31,8 +32,8 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideAuthInterceptor(): AuthInterceptor {
-        return AuthInterceptor()
+    fun provideAuthInterceptor(tokenManager: TokenManager): AuthInterceptor {
+        return AuthInterceptor(tokenManager)
     }
 
     @Provides

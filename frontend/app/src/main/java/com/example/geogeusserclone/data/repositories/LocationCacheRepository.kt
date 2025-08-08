@@ -20,18 +20,18 @@ class LocationCacheRepository @Inject constructor(
             // Lade nur wenn weniger als 10 Locations im Cache
             val cachedCount = locationDao.getCachedLocationCount()
             if (cachedCount < 10) {
-                val response = apiService.getLocations(50)
+                val response = apiService.getRandomLocations(50)
                 if (response.isSuccessful) {
                     val locationsResponse = response.body()!!
-                    val locationEntities = locationsResponse.locations.map { location ->
+                    val locationEntities = locationsResponse.data.locations.map { backendLocation ->
                         LocationEntity(
-                            id = location.id,
-                            latitude = location.latitude,
-                            longitude = location.longitude,
-                            imageUrl = location.imageUrl,
-                            country = location.country,
-                            city = location.city,
-                            difficulty = location.difficulty,
+                            id = backendLocation.id.toString(),
+                            latitude = backendLocation.coordinates.latitude,
+                            longitude = backendLocation.coordinates.longitude,
+                            imageUrl = backendLocation.imageUrls.firstOrNull() ?: "",
+                            country = backendLocation.country,
+                            city = backendLocation.city,
+                            difficulty = backendLocation.difficulty,
                             isCached = true,
                             isUsed = false
                         )

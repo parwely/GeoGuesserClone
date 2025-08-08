@@ -26,19 +26,19 @@ class UserRepository @Inject constructor(
         return try {
             val response = apiService.login(LoginRequest(email, password))
             if (response.isSuccessful) {
-                val loginResponse = response.body()!!
+                val authResponse = response.body()!!
 
                 // Setze Auth Token
-                authInterceptor.setAuthToken(loginResponse.token)
+                authInterceptor.setAuthToken(authResponse.data.token)
 
                 val userEntity = UserEntity(
-                    id = loginResponse.user.id,
-                    username = loginResponse.user.username,
-                    email = loginResponse.user.email,
-                    authToken = loginResponse.token,
-                    totalScore = loginResponse.user.totalScore,
-                    gamesPlayed = loginResponse.user.gamesPlayed,
-                    bestScore = loginResponse.user.bestScore,
+                    id = authResponse.data.user.id.toString(), // Convert Int to String
+                    username = authResponse.data.user.username,
+                    email = authResponse.data.user.email,
+                    authToken = authResponse.data.token,
+                    totalScore = authResponse.data.user.totalScore,
+                    gamesPlayed = authResponse.data.user.gamesPlayed,
+                    bestScore = authResponse.data.user.bestScore,
                     lastLoginAt = System.currentTimeMillis(),
                     createdAt = System.currentTimeMillis()
                 )
@@ -60,15 +60,15 @@ class UserRepository @Inject constructor(
         return try {
             val response = apiService.register(RegisterRequest(username, email, password))
             if (response.isSuccessful) {
-                val loginResponse = response.body()!!
+                val authResponse = response.body()!!
 
-                authInterceptor.setAuthToken(loginResponse.token)
+                authInterceptor.setAuthToken(authResponse.data.token)
 
                 val userEntity = UserEntity(
-                    id = loginResponse.user.id,
-                    username = loginResponse.user.username,
-                    email = loginResponse.user.email,
-                    authToken = loginResponse.token,
+                    id = authResponse.data.user.id.toString(), // Convert Int to String
+                    username = authResponse.data.user.username,
+                    email = authResponse.data.user.email,
+                    authToken = authResponse.data.token,
                     totalScore = 0,
                     gamesPlayed = 0,
                     bestScore = 0,

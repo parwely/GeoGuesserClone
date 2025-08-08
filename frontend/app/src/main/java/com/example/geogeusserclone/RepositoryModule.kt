@@ -3,6 +3,7 @@ package com.example.geogeusserclone
 import com.example.geogeusserclone.data.database.AppDatabase
 import com.example.geogeusserclone.data.network.ApiService
 import com.example.geogeusserclone.data.network.AuthInterceptor
+import com.example.geogeusserclone.data.network.MapillaryApiService
 import com.example.geogeusserclone.data.repositories.*
 import dagger.Module
 import dagger.Provides
@@ -31,10 +32,12 @@ object RepositoryModule {
     @Singleton
     fun provideLocationRepository(
         apiService: ApiService,
+        mapillaryApiService: MapillaryApiService,
         database: AppDatabase
     ): LocationRepository {
         return LocationRepository(
             apiService = apiService,
+            mapillaryApiService = mapillaryApiService,
             locationDao = database.locationDao()
         )
     }
@@ -50,6 +53,7 @@ object RepositoryModule {
             apiService = apiService,
             gameDao = database.gameDao(),
             guessDao = database.guessDao(),
+            locationDao = database.locationDao(),
             userRepository = userRepository
         )
     }
@@ -66,4 +70,3 @@ object RepositoryModule {
         )
     }
 }
-

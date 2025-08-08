@@ -79,7 +79,7 @@ class LocationRepository @Inject constructor(
                     val streetViewUrl = streetViewResult.getOrNull() ?: backendLocation.imageUrls.firstOrNull() ?: ""
 
                     val locationEntity = LocationEntity(
-                        id = backendLocation.id,
+                        id = backendLocation.id.toString(), // Convert Int to String
                         latitude = backendLocation.coordinates.latitude,
                         longitude = backendLocation.coordinates.longitude,
                         imageUrl = streetViewUrl,
@@ -101,9 +101,9 @@ class LocationRepository @Inject constructor(
         }
     }
 
-    private suspend fun getStreetViewForLocation(locationId: String): Result<String> {
+    private suspend fun getStreetViewForLocation(locationId: Int): Result<String> {
         return try {
-            val response = apiService.getStreetViewImage(
+            val response = apiService.getStreetView(
                 locationId = locationId,
                 responsive = true
             )
@@ -162,7 +162,7 @@ class LocationRepository @Inject constructor(
                             ?: ""
 
                         LocationEntity(
-                            id = backendLocation.id,
+                            id = backendLocation.id.toString(), // Convert Int to String
                             latitude = backendLocation.coordinates.latitude,
                             longitude = backendLocation.coordinates.longitude,
                             imageUrl = streetViewUrl,
@@ -309,7 +309,7 @@ class LocationRepository @Inject constructor(
 
     suspend fun testBackendConnection(): Result<Boolean> {
         return try {
-            val response = apiService.healthCheck()
+            val response = apiService.getHealth()
             if (response.isSuccessful) {
                 Result.success(true)
             } else {

@@ -56,13 +56,12 @@ fun StreetViewComponent(
                     detectDragGestures(
                         onDragStart = { isPanning = true },
                         onDragEnd = { isPanning = false }
-                    ) { change, _ ->
+                    ) { change, dragAmount ->
                         // Horizontale Bewegung = Rotation
-                        val deltaX = change.x
-                        rotation = (rotation + deltaX * 0.5f) % 360f
+                        rotation += dragAmount.x * 0.5f
 
                         // Vertikale Bewegung = Zoom (begrenzt)
-                        val deltaY = -change.y
+                        val deltaY = -dragAmount.y
                         zoom = (zoom + deltaY * 0.001f).coerceIn(0.8f, 3.0f)
                     }
                 }
@@ -358,7 +357,7 @@ private fun create360ViewerHtml(imageUrl: String): String {
                     // Limit vertical rotation
                     rotationX = Math.max(-90, Math.min(90, rotationX));
                     
-                    img.style.transform = `rotateX($${rotationX}deg) rotateY($${rotationY}deg)`;
+                    img.style.transform = 'rotateX(' + rotationX + 'deg) rotateY(' + rotationY + 'deg)';
                     
                     lastX = touch.clientX;
                     lastY = touch.clientY;
