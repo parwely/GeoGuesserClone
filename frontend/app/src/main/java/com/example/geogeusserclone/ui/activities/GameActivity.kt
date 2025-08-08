@@ -31,6 +31,7 @@ import com.example.geogeusserclone.utils.enableEdgeToEdge
 import com.example.geogeusserclone.viewmodels.GameViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.delay
+import com.example.geogeusserclone.ui.components.Enhanced360StreetView
 
 @AndroidEntryPoint
 class GameActivity : ComponentActivity() {
@@ -228,17 +229,13 @@ fun LocationImageScreen(
             fontWeight = FontWeight.Bold
         )
 
-        // Location Image
-        AsyncImage(
-            model = ImageRequest.Builder(LocalContext.current)
-                .data(location.imageUrl)
-                .crossfade(true)
-                .build(),
-            contentDescription = "Location Image",
+        // Enhanced 360° StreetView statt normalem AsyncImage
+        Enhanced360StreetView(
+            imageUrl = location.imageUrl,
+            onNavigationClick = onShowMap,
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .clickable { onShowMap() }
         )
 
         // Anweisungen
@@ -257,7 +254,7 @@ fun LocationImageScreen(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Tippe auf das Bild oder den Karten-Button, um deine Vermutung auf der Karte zu platzieren.",
+                    text = "Ziehe mit dem Finger um dich umzusehen. Tippe auf den 📍 Button um deine Vermutung zu platzieren.",
                     style = MaterialTheme.typography.bodyMedium
                 )
             }

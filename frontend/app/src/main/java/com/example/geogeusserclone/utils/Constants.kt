@@ -1,11 +1,22 @@
 package com.example.geogeusserclone.utils
 
 object Constants {
-    // Network Configuration
-    const val BASE_URL = "https://api.geoguessr-clone.com/"
-    const val CONNECT_TIMEOUT = 30L
-    const val READ_TIMEOUT = 30L
-    const val WRITE_TIMEOUT = 30L
+    // Network Configuration - Use localhost for development
+    const val BASE_URL = "http://10.0.2.2:3000/" // Android Emulator localhost
+    // Alternative for real device: const val BASE_URL = "http://192.168.1.100:3000/"
+    // Production: const val BASE_URL = "https://your-actual-backend.com/"
+
+    // Mapillary API Configuration
+    const val MAPILLARY_BASE_URL = "https://graph.mapillary.com/"
+    const val MAPILLARY_ACCESS_TOKEN = "MLY|4142433049200173|72206abe5035850d6743b23a49c41333" // Public demo token
+
+    const val CONNECT_TIMEOUT = 5L // Reduced timeout for faster fallback
+    const val READ_TIMEOUT = 10L
+    const val WRITE_TIMEOUT = 10L
+
+    // Offline Mode Configuration
+    const val ENABLE_OFFLINE_MODE = true
+    const val OFFLINE_FALLBACK_DELAY_MS = 2000L
 
     // Game Configuration
     const val MAX_ROUND_TIME_MS = 120000L // 2 Minuten

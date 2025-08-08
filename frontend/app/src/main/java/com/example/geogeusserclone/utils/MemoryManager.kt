@@ -21,13 +21,16 @@ object MemoryManager {
     fun handleMemoryPressure(context: Context, level: Int) {
         when (level) {
             ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN,
-            ComponentCallbacks2.TRIM_MEMORY_BACKGROUND,
-            // Verwende moderne Alternative oder suppresse warning für legacy support
-            ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW -> {
+            ComponentCallbacks2.TRIM_MEMORY_BACKGROUND -> {
                 // Leichte Bereinigung - nur einen Teil des Cache leeren
                 clearImageCache(context, moderate = true)
             }
-            ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL -> {
+            // Verwende moderne Konstanten oder suppresse deprecated warnings
+            ComponentCallbacks2.TRIM_MEMORY_RUNNING_MODERATE -> {
+                // Moderate Bereinigung
+                clearImageCache(context, moderate = true)
+            }
+            ComponentCallbacks2.TRIM_MEMORY_COMPLETE -> {
                 // Aggressive Bereinigung - kompletten Cache leeren
                 clearImageCache(context, moderate = false)
             }
@@ -66,12 +69,12 @@ object MemoryManager {
                         handleMemoryPressure(context, ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN)
                     }
                     Lifecycle.Event.ON_STOP -> {
-                        // App ist nicht mehr sichtbar - stärkere Bereinigung
-                        handleMemoryPressure(context, ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW)
+                        // App ist nicht mehr sichtbar - moderate Bereinigung
+                        handleMemoryPressure(context, ComponentCallbacks2.TRIM_MEMORY_RUNNING_MODERATE)
                     }
                     Lifecycle.Event.ON_DESTROY -> {
                         // App wird zerstört - komplette Bereinigung
-                        handleMemoryPressure(context, ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL)
+                        handleMemoryPressure(context, ComponentCallbacks2.TRIM_MEMORY_COMPLETE)
                     }
                     else -> Unit
                 }
@@ -124,6 +127,32 @@ object MemoryManager {
         val memoryInfo = android.app.ActivityManager.MemoryInfo()
         activityManager.getMemoryInfo(memoryInfo)
         return memoryInfo.lowMemory
+    }
+
+    /**
+     * Implementiert moderne Memory Management Strategie
+     */
+    @Suppress("DEPRECATION")
+    fun handleModernMemoryPressure(context: Context, level: Int) {
+        when (level) {
+            // Verwende neue nicht-deprecated Konstanten wo verfügbar
+            ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN,
+            ComponentCallbacks2.TRIM_MEMORY_BACKGROUND,
+            ComponentCallbacks2.TRIM_MEMORY_RUNNING_MODERATE -> {
+                // Moderate Bereinigung
+                clearImageCache(context, moderate = true)
+                System.gc() // Suggestion für Garbage Collection
+            }
+            ComponentCallbacks2.TRIM_MEMORY_COMPLETE -> {
+                // Aggressive Bereinigung
+                clearImageCache(context, moderate = false)
+                System.gc() // Force Garbage Collection
+            }
+            else -> {
+                // Fallback für unbekannte Level
+                clearImageCache(context, moderate = true)
+            }
+        }
     }
 }
 

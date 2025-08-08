@@ -61,11 +61,40 @@ class GameViewModel @Inject constructor(
             try {
                 _uiState.update { it.copy(isLoading = true, error = null) }
 
-                val userId = currentUserId ?: return@launch
+                val userId = currentUserId ?: run {
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            error = "Kein Benutzer gefunden. Bitte neu anmelden."
+                        )
+                    }
+                    return@launch
+                }
+
+                // Debug: Teste direkt Location Loading
+                println("GameViewModel: Starte neues Spiel für User: $userId")
+
+                // Teste erst ob Locations verfügbar sind
+                locationRepository.getRandomLocation().fold(
+                    onSuccess = { testLocation ->
+                        println("GameViewModel: Test-Location erfolgreich geladen: ${testLocation.city}")
+                    },
+                    onFailure = { error ->
+                        println("GameViewModel: Fehler beim Test-Location laden: ${error.message}")
+                        _uiState.update {
+                            it.copy(
+                                isLoading = false,
+                                error = "Locations können nicht geladen werden: ${error.message}"
+                            )
+                        }
+                        return@launch
+                    }
+                )
 
                 // Erstelle neues Spiel
                 gameRepository.createGame(userId, "single", 5).fold(
                     onSuccess = { game ->
+                        println("GameViewModel: Spiel erfolgreich erstellt: ${game.id}")
                         _uiState.update {
                             it.copy(
                                 currentGame = game,
@@ -83,6 +112,7 @@ class GameViewModel @Inject constructor(
                         loadNextLocation()
                     },
                     onFailure = { error ->
+                        println("GameViewModel: Fehler beim Spielerstellung: ${error.message}")
                         _uiState.update {
                             it.copy(
                                 isLoading = false,
@@ -92,6 +122,7 @@ class GameViewModel @Inject constructor(
                     }
                 )
             } catch (e: Exception) {
+                println("GameViewModel: Unerwarteter Fehler: ${e.message}")
                 _uiState.update {
                     it.copy(
                         isLoading = false,
@@ -104,18 +135,22 @@ class GameViewModel @Inject constructor(
 
     private suspend fun loadNextLocation() {
         try {
+            _uiState.update { it.copy(isLoading = true) }
+
             // Verwende preloaded Location falls verfügbar
             val location = if (preloadedLocations.isNotEmpty()) {
                 preloadedLocations.removeFirst()
             } else {
+                // Fallback: Hole Location direkt aus Repository
                 locationRepository.getRandomLocation().getOrNull()
             }
 
-            location?.let {
+            if (location != null) {
                 _uiState.update { state ->
                     state.copy(
-                        currentLocation = it,
-                        isLoading = false
+                        currentLocation = location,
+                        isLoading = false,
+                        error = null
                     )
                 }
                 startRoundTimer()
@@ -128,11 +163,22 @@ class GameViewModel @Inject constructor(
                         }
                     }
                 }
-            } ?: run {
-                _uiState.update { it.copy(error = "Keine Location verfügbar") }
+            } else {
+                // Kritischer Fehler: Keine Location verfügbar
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        error = "Keine Locations verfügbar. Bitte App neu starten."
+                    )
+                }
             }
         } catch (e: Exception) {
-            _uiState.update { it.copy(error = "Fehler beim Laden der Location: ${e.message}") }
+            _uiState.update {
+                it.copy(
+                    isLoading = false,
+                    error = "Fehler beim Laden der Location: ${e.message}"
+                )
+            }
         }
     }
 
