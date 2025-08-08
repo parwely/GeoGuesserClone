@@ -8,7 +8,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Place // Verwende Place statt Map
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -99,7 +99,7 @@ fun GameScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onBackPressed) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Zurück")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück")
                     }
                 },
                 actions = {
@@ -212,7 +212,7 @@ fun LocationImageScreen(
     ) {
         // Timer
         LinearProgressIndicator(
-            progress = (timeRemaining / 120000f).coerceIn(0f, 1f),
+            progress = { (timeRemaining / 120000f).coerceIn(0f, 1f) },
             modifier = Modifier.fillMaxWidth(),
             color = when {
                 timeRemaining > 60000 -> MaterialTheme.colorScheme.primary
