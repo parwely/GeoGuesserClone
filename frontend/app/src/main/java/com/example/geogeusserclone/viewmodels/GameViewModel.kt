@@ -11,11 +11,8 @@ import com.example.geogeusserclone.data.repositories.LocationRepository
 import com.example.geogeusserclone.data.repositories.UserRepository
 import com.example.geogeusserclone.utils.Constants
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.launch
-import java.util.UUID
 import javax.inject.Inject
 
 @HiltViewModel
@@ -29,86 +26,113 @@ class GameViewModel @Inject constructor(
     val uiState: StateFlow<GameState> = _uiState.asStateFlow()
 
     private var gameTimer: Job? = null
-    private var currentUser: com.example.geogeusserclone.data.database.entities.UserEntity? = null
+    private var currentUserId: String? = null
+    private var preloadedLocations = mutableListOf<LocationEntity>()
 
     init {
-        loadCurrentUser()
+        initializeUser()
+        preloadGameLocations()
     }
 
-    private fun loadCurrentUser() {
+    private fun initializeUser() {
         viewModelScope.launch {
-            currentUser = userRepository.getCurrentUser()
+            currentUserId = userRepository.getCurrentUser()?.id
         }
     }
 
-    fun startNewGame(gameMode: String = "single", rounds: Int = 5) {
-        viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
-
+    private fun preloadGameLocations() {
+        viewModelScope.launch(Dispatchers.IO) {
             try {
-                val user = currentUser ?: run {
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        error = "Benutzer nicht angemeldet"
-                    )
-                    return@launch
-                }
-
-                // Erstelle neues Spiel über Repository (mit Backend-Integration)
-                val gameResult = gameRepository.createGame(user.id, gameMode, rounds)
-
-                if (gameResult.isSuccess) {
-                    val game = gameResult.getOrNull()!!
-
-                    // Lade erste Location
-                    loadNextLocation(game)
-                } else {
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        error = "Spiel konnte nicht erstellt werden: ${gameResult.exceptionOrNull()?.message}"
-                    )
+                locationRepository.preloadLocations()
+                // Cache 5 Locations für bessere Performance
+                repeat(5) {
+                    locationRepository.getRandomLocation().getOrNull()?.let { location ->
+                        preloadedLocations.add(location)
+                    }
                 }
             } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    error = "Fehler beim Starten des Spiels: ${e.message}"
-                )
+                // Silent fail - App funktioniert weiter ohne Preloading
             }
         }
     }
 
-    private suspend fun loadNextLocation(game: GameEntity) {
+    fun startNewGame() {
+        viewModelScope.launch {
+            try {
+                _uiState.update { it.copy(isLoading = true, error = null) }
+
+                val userId = currentUserId ?: return@launch
+
+                // Erstelle neues Spiel
+                gameRepository.createGame(userId, "single", 5).fold(
+                    onSuccess = { game ->
+                        _uiState.update {
+                            it.copy(
+                                currentGame = game,
+                                isLoading = false,
+                                showMap = false,
+                                showRoundResult = false,
+                                showGameCompletion = false,
+                                revealGuessResult = null,
+                                timeRemaining = Constants.MAX_ROUND_TIME_MS,
+                                currentRound = 1,
+                                totalRounds = game.totalRounds,
+                                gameScore = 0
+                            )
+                        }
+                        loadNextLocation()
+                    },
+                    onFailure = { error ->
+                        _uiState.update {
+                            it.copy(
+                                isLoading = false,
+                                error = "Fehler beim Starten des Spiels: ${error.message}"
+                            )
+                        }
+                    }
+                )
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        error = "Unerwarteter Fehler: ${e.message}"
+                    )
+                }
+            }
+        }
+    }
+
+    private suspend fun loadNextLocation() {
         try {
-            val locationResult = locationRepository.getRandomLocation()
-
-            if (locationResult.isSuccess) {
-                val location = locationResult.getOrNull()!!
-
-                _uiState.value = _uiState.value.copy(
-                    currentGame = game,
-                    currentLocation = location,
-                    isLoading = false,
-                    showMap = false,
-                    showRoundResult = false,
-                    showGameCompletion = false,
-                    timeRemaining = Constants.MAX_ROUND_TIME_MS,
-                    currentRound = game.currentRound,
-                    totalRounds = game.totalRounds,
-                    gameScore = game.score
-                )
-
-                startRoundTimer()
+            // Verwende preloaded Location falls verfügbar
+            val location = if (preloadedLocations.isNotEmpty()) {
+                preloadedLocations.removeFirst()
             } else {
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    error = "Location konnte nicht geladen werden"
-                )
+                locationRepository.getRandomLocation().getOrNull()
+            }
+
+            location?.let {
+                _uiState.update { state ->
+                    state.copy(
+                        currentLocation = it,
+                        isLoading = false
+                    )
+                }
+                startRoundTimer()
+
+                // Preloade nächste Location im Hintergrund
+                if (preloadedLocations.size < 2) {
+                    viewModelScope.launch(Dispatchers.IO) {
+                        locationRepository.getRandomLocation().getOrNull()?.let { nextLocation ->
+                            preloadedLocations.add(nextLocation)
+                        }
+                    }
+                }
+            } ?: run {
+                _uiState.update { it.copy(error = "Keine Location verfügbar") }
             }
         } catch (e: Exception) {
-            _uiState.value = _uiState.value.copy(
-                isLoading = false,
-                error = "Fehler beim Laden der Location: ${e.message}"
-            )
+            _uiState.update { it.copy(error = "Fehler beim Laden der Location: ${e.message}") }
         }
     }
 
@@ -117,126 +141,161 @@ class GameViewModel @Inject constructor(
         gameTimer = viewModelScope.launch {
             var timeLeft = Constants.MAX_ROUND_TIME_MS
 
-            while (timeLeft > 0 && !_uiState.value.showMap && !_uiState.value.showRoundResult) {
+            while (timeLeft > 0 && _uiState.value.currentLocation != null && !_uiState.value.showRoundResult) {
+                _uiState.update { it.copy(timeRemaining = timeLeft) }
                 delay(1000)
                 timeLeft -= 1000
-                _uiState.value = _uiState.value.copy(timeRemaining = timeLeft)
             }
 
-            // Zeit abgelaufen - automatisch zur Karte wechseln
-            if (timeLeft <= 0 && !_uiState.value.showMap && !_uiState.value.showRoundResult) {
-                showMap()
+            // Zeit abgelaufen - automatisch schlechten Guess abgeben
+            if (timeLeft <= 0 && !_uiState.value.showRoundResult) {
+                val currentLocation = _uiState.value.currentLocation
+                if (currentLocation != null) {
+                    // Zufällige Position als Guess (sehr schlecht)
+                    submitGuess(0.0, 0.0)
+                }
             }
         }
     }
 
-    fun showMap() {
-        gameTimer?.cancel()
-        _uiState.value = _uiState.value.copy(showMap = true)
-    }
-
-    fun hideMap() {
-        _uiState.value = _uiState.value.copy(showMap = false)
-        startRoundTimer()
-    }
-
     fun submitGuess(guessLat: Double, guessLng: Double) {
         viewModelScope.launch {
-            val currentState = _uiState.value
-            val game = currentState.currentGame ?: return@launch
-            val location = currentState.currentLocation ?: return@launch
-
-            _uiState.value = currentState.copy(isLoading = true)
-
             try {
-                val timeSpent = Constants.MAX_ROUND_TIME_MS - currentState.timeRemaining
+                val currentGame = _uiState.value.currentGame ?: return@launch
+                val currentLocation = _uiState.value.currentLocation ?: return@launch
+                val timeSpent = Constants.MAX_ROUND_TIME_MS - _uiState.value.timeRemaining
 
-                val guessResult = gameRepository.submitGuess(
-                    gameId = game.id,
-                    locationId = location.id,
+                gameTimer?.cancel()
+
+                _uiState.update { it.copy(isLoading = true) }
+
+                gameRepository.submitGuess(
+                    gameId = currentGame.id,
+                    locationId = currentLocation.id,
                     guessLat = guessLat,
                     guessLng = guessLng,
-                    actualLat = location.latitude,
-                    actualLng = location.longitude,
+                    actualLat = currentLocation.latitude,
+                    actualLng = currentLocation.longitude,
                     timeSpent = timeSpent
+                ).fold(
+                    onSuccess = { guess ->
+                        // Update Game Entity lokal
+                        val updatedGame = currentGame.copy(
+                            score = currentGame.score + guess.score,
+                            currentRound = currentGame.currentRound + 1
+                        )
+
+                        _uiState.update { state ->
+                            state.copy(
+                                currentGame = updatedGame,
+                                revealGuessResult = guess,
+                                showRoundResult = true,
+                                showMap = false,
+                                isLoading = false,
+                                gameScore = updatedGame.score
+                            )
+                        }
+                    },
+                    onFailure = { error ->
+                        _uiState.update {
+                            it.copy(
+                                isLoading = false,
+                                error = "Fehler beim Übermitteln der Vermutung: ${error.message}"
+                            )
+                        }
+                    }
                 )
-
-                if (guessResult.isSuccess) {
-                    val guess = guessResult.getOrNull()!!
-
-                    _uiState.value = _uiState.value.copy(
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
                         isLoading = false,
-                        showMap = false,
-                        showRoundResult = true,
-                        revealGuessResult = guess,
-                        gameScore = game.score + guess.score
-                    )
-                } else {
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        error = "Guess konnte nicht übermittelt werden"
+                        error = "Unerwarteter Fehler: ${e.message}"
                     )
                 }
-            } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    error = "Fehler beim Übermitteln des Guess: ${e.message}"
-                )
             }
         }
     }
 
     fun proceedToNextRound() {
         viewModelScope.launch {
-            val currentState = _uiState.value
-            val game = currentState.currentGame ?: return@launch
+            val currentGame = _uiState.value.currentGame ?: return@launch
 
-            if (game.currentRound >= game.totalRounds) {
+            if (currentGame.currentRound > currentGame.totalRounds) {
                 // Spiel beenden
-                completeGame(game)
+                completeGame()
             } else {
                 // Nächste Runde
-                val updatedGame = game.copy(currentRound = game.currentRound + 1)
-                loadNextLocation(updatedGame)
+                _uiState.update { state ->
+                    state.copy(
+                        showRoundResult = false,
+                        revealGuessResult = null,
+                        currentRound = currentGame.currentRound,
+                        timeRemaining = Constants.MAX_ROUND_TIME_MS
+                    )
+                }
+                loadNextLocation()
             }
         }
     }
 
-    private suspend fun completeGame(game: GameEntity) {
+    private suspend fun completeGame() {
         try {
-            val completionResult = gameRepository.completeGame(game.id)
+            val currentGame = _uiState.value.currentGame ?: return
 
-            if (completionResult.isSuccess) {
-                val completedGame = completionResult.getOrNull()!!
+            gameRepository.completeGame(currentGame.id).fold(
+                onSuccess = { completedGame ->
+                    _uiState.update { state ->
+                        state.copy(
+                            currentGame = completedGame,
+                            showRoundResult = false,
+                            showGameCompletion = true,
+                            revealGuessResult = null
+                        )
+                    }
 
-                _uiState.value = _uiState.value.copy(
-                    currentGame = completedGame,
-                    showRoundResult = false,
-                    showGameCompletion = true
-                )
-            } else {
-                _uiState.value = _uiState.value.copy(
-                    error = "Spiel konnte nicht abgeschlossen werden"
-                )
-            }
-        } catch (e: Exception) {
-            _uiState.value = _uiState.value.copy(
-                error = "Fehler beim Abschließen des Spiels: ${e.message}"
+                    // Sync mit Backend im Hintergrund
+                    syncGameResultWithBackend(completedGame)
+                },
+                onFailure = { error ->
+                    _uiState.update {
+                        it.copy(error = "Fehler beim Abschließen des Spiels: ${error.message}")
+                    }
+                }
             )
+        } catch (e: Exception) {
+            _uiState.update {
+                it.copy(error = "Unerwarteter Fehler beim Spielende: ${e.message}")
+            }
         }
     }
 
-    fun getGameGuesses(): Flow<List<GuessEntity>> {
-        val gameId = _uiState.value.currentGame?.id
-        return if (gameId != null) {
-            gameRepository.getGuessesByGame(gameId)
-        } else {
-            flowOf(emptyList())
+    private fun syncGameResultWithBackend(game: GameEntity) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val guesses = gameRepository.getGuessesByGame(game.id).first()
+                gameRepository.submitCompleteGameResult(game, guesses)
+                // Silent success - Spiel ist bereits lokal gespeichert
+            } catch (e: Exception) {
+                // Silent fail - Spiel bleibt lokal gespeichert
+            }
         }
+    }
+
+    fun showMap() {
+        _uiState.update { it.copy(showMap = true) }
+    }
+
+    fun hideMap() {
+        _uiState.update { it.copy(showMap = false) }
     }
 
     fun clearError() {
-        _uiState.value = _uiState.value.copy(error = null)
+        _uiState.update { it.copy(error = null) }
+    }
+
+    fun getGameGuesses(): Flow<List<GuessEntity>> {
+        val gameId = _uiState.value.currentGame?.id ?: return flowOf(emptyList())
+        return gameRepository.getGuessesByGame(gameId)
     }
 
     override fun onCleared() {
