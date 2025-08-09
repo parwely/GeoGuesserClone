@@ -114,18 +114,18 @@ class MapTileCleanupWorker(
         return try {
             val cacheDir = applicationContext.cacheDir
             val mapCacheDir = java.io.File(cacheDir, "osmdroid")
-
+            
             if (mapCacheDir.exists()) {
                 // Lösche Tiles älter als 7 Tage
                 val weekAgo = System.currentTimeMillis() - (7 * 24 * 60 * 60 * 1000)
-
+                
                 mapCacheDir.listFiles()?.forEach { file ->
                     if (file.lastModified() < weekAgo) {
                         file.delete()
                     }
                 }
             }
-
+            
             Result.success()
         } catch (e: Exception) {
             Result.failure()

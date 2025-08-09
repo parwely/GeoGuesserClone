@@ -136,7 +136,7 @@ class GameViewModel @Inject constructor(
     private suspend fun loadNextLocation() {
         try {
             _uiState.update { it.copy(isLoading = true) }
-
+            
             // Verwende preloaded Location falls verfügbar
             val location = if (preloadedLocations.isNotEmpty()) {
                 preloadedLocations.removeFirst()
@@ -165,19 +165,19 @@ class GameViewModel @Inject constructor(
                 }
             } else {
                 // Kritischer Fehler: Keine Location verfügbar
-                _uiState.update {
+                _uiState.update { 
                     it.copy(
                         isLoading = false,
                         error = "Keine Locations verfügbar. Bitte App neu starten."
-                    )
+                    ) 
                 }
             }
         } catch (e: Exception) {
-            _uiState.update {
+            _uiState.update { 
                 it.copy(
                     isLoading = false,
                     error = "Fehler beim Laden der Location: ${e.message}"
-                )
+                ) 
             }
         }
     }

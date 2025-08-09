@@ -4,11 +4,13 @@ import com.example.geogeusserclone.data.database.dao.LocationDao
 import com.example.geogeusserclone.data.database.entities.LocationEntity
 import com.example.geogeusserclone.data.network.ApiService
 import com.example.geogeusserclone.data.network.MapillaryApiService
-import com.example.geogeusserclone.data.network.NetworkResult
 import com.example.geogeusserclone.utils.Constants
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import java.util.UUID
+import java.util.*
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -111,17 +113,29 @@ class LocationRepository @Inject constructor(
             if (response.isSuccessful) {
                 val streetViewResponse = response.body()!!
                 if (streetViewResponse.success) {
-                    val streetViewUrl = streetViewResponse.data.streetViewUrl
-                    if (!streetViewUrl.isNullOrEmpty()) {
-                        Result.success(streetViewUrl)
+                    // Korrekte Verarbeitung der verschachtelten URL-Struktur
+                    val urlsData = streetViewResponse.data.streetViewUrls
+                    if (urlsData is Map<*, *>) {
+                        val url = (urlsData["mobile"] as? String)
+                            ?: (urlsData["tablet"] as? String)
+                            ?: (urlsData["desktop"] as? String)
+
+                        if (!url.isNullOrEmpty()) {
+                            return Result.success(url)
+                        }
+                    }
+                    // Fallback auf die einzelne URL, falls das Objekt-Parsing fehlschlägt
+                    val singleUrl = streetViewResponse.data.streetViewUrl
+                    if (!singleUrl.isNullOrEmpty()) {
+                        Result.success(singleUrl)
                     } else {
-                        Result.failure(Exception("Keine Street View URL"))
+                        Result.failure(Exception("Keine Street View URL in der Antwort gefunden"))
                     }
                 } else {
-                    Result.failure(Exception("Street View Anfrage fehlgeschlagen"))
+                    Result.failure(Exception("Street View Anfrage vom Backend als fehlgeschlagen markiert"))
                 }
             } else {
-                Result.failure(Exception("Street View API Fehler"))
+                Result.failure(Exception("Street View API Fehler: ${response.code()}"))
             }
         } catch (e: Exception) {
             Result.failure(e)
@@ -146,52 +160,60 @@ class LocationRepository @Inject constructor(
     }
 
     suspend fun preloadLocations() {
-        try {
-            // Preload von deinem Backend (Google Maps)
-            val response = withTimeoutOrNull(Constants.BACKEND_FALLBACK_DELAY_MS) {
-                apiService.getRandomLocations(count = 10, difficulty = 2)
-            }
-
-            if (response?.isSuccessful == true) {
-                val locationsResponse = response.body()!!
-                if (locationsResponse.success) {
-                    val locationEntities = locationsResponse.data.locations.map { backendLocation ->
-                        // Hole Street View URL für jede Location
-                        val streetViewUrl = getStreetViewForLocation(backendLocation.id).getOrNull()
-                            ?: backendLocation.imageUrls.firstOrNull()
-                            ?: ""
-
-                        LocationEntity(
-                            id = backendLocation.id.toString(), // Convert Int to String
-                            latitude = backendLocation.coordinates.latitude,
-                            longitude = backendLocation.coordinates.longitude,
-                            imageUrl = streetViewUrl,
-                            country = backendLocation.country,
-                            city = backendLocation.city,
-                            difficulty = backendLocation.difficulty,
-                            isCached = true,
-                            isUsed = false
-                        )
-                    }
-                    locationDao.insertLocations(locationEntities)
-                    return
+        withContext(Dispatchers.IO) { // Wechsle zum IO-Dispatcher für Netzwerkoperationen
+            try {
+                val response = withTimeoutOrNull(Constants.BACKEND_FALLBACK_DELAY_MS) {
+                    apiService.getRandomLocations(count = 10, difficulty = 2)
                 }
+
+                if (response?.isSuccessful == true) {
+                    val locationsResponse = response.body()!!
+                    if (locationsResponse.success) {
+                        // Parallele Ausführung der StreetView-Anfragen
+                        val locationEntities = locationsResponse.data.locations.map { backendLocation ->
+                            async {
+                                val streetViewUrl = getStreetViewForLocation(backendLocation.id).getOrNull()
+                                    ?: backendLocation.imageUrls.firstOrNull()
+                                    ?: ""
+
+                                if (streetViewUrl.isNotBlank()) {
+                                    LocationEntity(
+                                        id = backendLocation.id.toString(),
+                                        latitude = backendLocation.coordinates.latitude,
+                                        longitude = backendLocation.coordinates.longitude,
+                                        imageUrl = streetViewUrl,
+                                        country = backendLocation.country,
+                                        city = backendLocation.city,
+                                        difficulty = backendLocation.difficulty,
+                                        isCached = true,
+                                        isUsed = false
+                                    )
+                                } else {
+                                    null // Null zurückgeben, wenn keine URL gefunden wurde
+                                }
+                            }
+                        }.mapNotNull { it.await() } // Auf alle warten und Null-Werte entfernen
+
+                        locationDao.insertLocations(locationEntities)
+                        return@withContext
+                    }
+                }
+
+                // Fallback: Lade Standard-Locations, wenn das Backend nicht verfügbar ist
+                val fallbackLocations = createFallbackLocations()
+                locationDao.insertLocations(fallbackLocations)
+
+            } catch (e: Exception) {
+                // Stiller Fallback bei Fehlern
+                val fallbackLocations = createFallbackLocations()
+                locationDao.insertLocations(fallbackLocations)
             }
-
-            // Fallback: Lade Standard-Locations falls Backend nicht verfügbar
-            val fallbackLocations = createFallbackLocations()
-            locationDao.insertLocations(fallbackLocations)
-
-        } catch (e: Exception) {
-            // Stille Fallback-Behandlung
-            val fallbackLocations = createFallbackLocations()
-            locationDao.insertLocations(fallbackLocations)
         }
     }
 
     private suspend fun createFallbackLocationsWithMapillary(): List<LocationEntity> {
-        // Vereinfachte Mapillary Integration als Fallback
-        return createFallbackLocations() // Für jetzt verwenden wir die statischen Fallbacks
+        // Vereinfachte Mapillary-Integration als Fallback
+        return createFallbackLocations() // Momentan werden die statischen Fallbacks verwendet
     }
 
     private fun createFallbackLocations(): List<LocationEntity> {
