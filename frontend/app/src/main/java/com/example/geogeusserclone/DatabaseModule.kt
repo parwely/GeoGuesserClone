@@ -182,6 +182,233 @@ object DatabaseModule {
         }
     }
 
+    private val MIGRATION_6_7 = object : Migration(6, 7) {
+        override fun migrate(database: SupportSQLiteDatabase) {
+            // Version 7: Sanfte Bereinigung der Database-Probleme ohne komplettes Löschen
+
+            // Prüfe welche Tabellen existieren
+            val gamesCursor = database.query("SELECT name FROM sqlite_master WHERE type='table' AND name='games'")
+            val gamesTableExists = gamesCursor.moveToFirst()
+            gamesCursor.close()
+
+            val locationsCursor = database.query("SELECT name FROM sqlite_master WHERE type='table' AND name='locations'")
+            val locationsTableExists = locationsCursor.moveToFirst()
+            locationsCursor.close()
+
+            val guessesCursor = database.query("SELECT name FROM sqlite_master WHERE type='table' AND name='guesses'")
+            val guessesTableExists = guessesCursor.moveToFirst()
+            guessesCursor.close()
+
+            // Nur problematische games Tabelle neu erstellen (wegen "duration" Spalten-Problem)
+            if (gamesTableExists) {
+                database.execSQL("DROP TABLE IF EXISTS games")
+            }
+
+            // Erstelle games Tabelle neu mit korrekter Struktur
+            database.execSQL("""
+                CREATE TABLE games (
+                    id TEXT PRIMARY KEY NOT NULL,
+                    userId TEXT NOT NULL,
+                    gameMode TEXT NOT NULL DEFAULT 'classic',
+                    totalRounds INTEGER NOT NULL DEFAULT 5,
+                    currentRound INTEGER NOT NULL DEFAULT 1,
+                    score INTEGER NOT NULL DEFAULT 0,
+                    isCompleted INTEGER NOT NULL DEFAULT 0,
+                    createdAt INTEGER NOT NULL,
+                    startedAt INTEGER,
+                    completedAt INTEGER,
+                    duration INTEGER
+                )
+            """)
+
+            // Erstelle locations Tabelle nur wenn sie nicht existiert
+            if (!locationsTableExists) {
+                database.execSQL("""
+                    CREATE TABLE locations (
+                        id TEXT PRIMARY KEY NOT NULL,
+                        latitude REAL NOT NULL,
+                        longitude REAL NOT NULL,
+                        imageUrl TEXT NOT NULL,
+                        country TEXT,
+                        city TEXT,
+                        difficulty INTEGER NOT NULL DEFAULT 1,
+                        isCached INTEGER NOT NULL DEFAULT 0,
+                        isUsed INTEGER NOT NULL DEFAULT 0,
+                        cachedAt INTEGER NOT NULL DEFAULT ${System.currentTimeMillis()}
+                    )
+                """)
+            }
+
+            // Erstelle guesses Tabelle nur wenn sie nicht existiert
+            if (!guessesTableExists) {
+                database.execSQL("""
+                    CREATE TABLE guesses (
+                        id TEXT PRIMARY KEY NOT NULL,
+                        gameId TEXT NOT NULL,
+                        locationId TEXT NOT NULL,
+                        guessLat REAL NOT NULL,
+                        guessLng REAL NOT NULL,
+                        actualLat REAL NOT NULL,
+                        actualLng REAL NOT NULL,
+                        distance REAL NOT NULL,
+                        score INTEGER NOT NULL,
+                        timeSpent INTEGER NOT NULL,
+                        submittedAt INTEGER NOT NULL
+                    )
+                """)
+            }
+
+            // Erstelle alle Indizes neu (falls sie nicht existieren)
+            database.execSQL("CREATE INDEX IF NOT EXISTS `index_games_userId` ON `games` (`userId`)")
+            database.execSQL("CREATE INDEX IF NOT EXISTS `index_games_isCompleted` ON `games` (`isCompleted`)")
+            database.execSQL("CREATE INDEX IF NOT EXISTS `index_games_createdAt` ON `games` (`createdAt`)")
+            database.execSQL("CREATE INDEX IF NOT EXISTS `index_guesses_gameId` ON `guesses` (`gameId`)")
+            database.execSQL("CREATE INDEX IF NOT EXISTS `index_guesses_locationId` ON `guesses` (`locationId`)")
+            database.execSQL("CREATE INDEX IF NOT EXISTS `index_locations_isUsed_isCached` ON `locations` (`isUsed`, `isCached`)")
+
+            // Stelle sicher, dass users Tabelle existiert
+            val usersCursor = database.query("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")
+            val usersTableExists = usersCursor.moveToFirst()
+            usersCursor.close()
+
+            if (!usersTableExists) {
+                database.execSQL("""
+                    CREATE TABLE users (
+                        id TEXT PRIMARY KEY NOT NULL,
+                        username TEXT NOT NULL,
+                        email TEXT NOT NULL,
+                        authToken TEXT,
+                        totalScore INTEGER NOT NULL DEFAULT 0,
+                        gamesPlayed INTEGER NOT NULL DEFAULT 0,
+                        bestScore INTEGER NOT NULL DEFAULT 0,
+                        lastLoginAt INTEGER NOT NULL DEFAULT 0,
+                        createdAt INTEGER NOT NULL DEFAULT ${System.currentTimeMillis()}
+                    )
+                """)
+            }
+
+            // Emergency User erstellen
+            database.execSQL("""
+                INSERT OR IGNORE INTO users (id, username, email, authToken, totalScore, gamesPlayed, bestScore, lastLoginAt, createdAt)
+                VALUES ('emergency_user', 'Emergency User', 'emergency@local.com', NULL, 0, 0, 0, ${System.currentTimeMillis()}, ${System.currentTimeMillis()})
+            """)
+
+            // Füge Standard-Fallback-Locations hinzu falls locations Tabelle leer ist
+            try {
+                val countCursor = database.query("SELECT COUNT(*) FROM locations")
+                val hasLocations = if (countCursor.moveToFirst()) {
+                    countCursor.getInt(0) > 0
+                } else {
+                    false
+                }
+                countCursor.close()
+
+                if (!hasLocations) {
+                    // Füge eine Fallback-Location hinzu
+                    database.execSQL("""
+                        INSERT INTO locations (id, latitude, longitude, imageUrl, country, city, difficulty, isCached, isUsed, cachedAt)
+                        VALUES ('fallback_paris', 48.8566, 2.3522, 'https://images.unsplash.com/photo-1502602898536-47ad22581b52?w=800', 'France', 'Paris', 2, 1, 0, ${System.currentTimeMillis()})
+                    """)
+                }
+            } catch (e: Exception) {
+                // Silent fail - Fallback-Location konnte nicht eingefügt werden
+            }
+        }
+    }
+
+    private val MIGRATION_7_8 = object : Migration(7, 8) {
+        override fun migrate(database: SupportSQLiteDatabase) {
+            // Version 8: Radikaler Clean-Slate. Löscht alle Tabellen und erstellt sie neu.
+            // Dies behebt alle vorherigen Migrationsprobleme garantiert.
+
+            // 1. Alle alten Tabellen löschen
+            database.execSQL("DROP TABLE IF EXISTS `games`")
+            database.execSQL("DROP TABLE IF EXISTS `guesses`")
+            database.execSQL("DROP TABLE IF EXISTS `locations`")
+            database.execSQL("DROP TABLE IF EXISTS `users`")
+
+            // 2. Alle Tabellen mit der korrekten, aktuellen Struktur neu erstellen
+            database.execSQL("""
+                CREATE TABLE `users` (
+                    `id` TEXT NOT NULL, 
+                    `username` TEXT NOT NULL, 
+                    `email` TEXT NOT NULL, 
+                    `authToken` TEXT, 
+                    `totalScore` INTEGER NOT NULL DEFAULT 0, 
+                    `gamesPlayed` INTEGER NOT NULL DEFAULT 0, 
+                    `bestScore` INTEGER NOT NULL DEFAULT 0, 
+                    `lastLoginAt` INTEGER NOT NULL DEFAULT 0, 
+                    `createdAt` INTEGER NOT NULL, 
+                    PRIMARY KEY(`id`)
+                )
+            """)
+
+            database.execSQL("""
+                CREATE TABLE `locations` (
+                    `id` TEXT NOT NULL, 
+                    `latitude` REAL NOT NULL, 
+                    `longitude` REAL NOT NULL, 
+                    `imageUrl` TEXT NOT NULL, 
+                    `country` TEXT, 
+                    `city` TEXT, 
+                    `difficulty` INTEGER NOT NULL DEFAULT 1, 
+                    `isCached` INTEGER NOT NULL DEFAULT 0, 
+                    `isUsed` INTEGER NOT NULL DEFAULT 0, 
+                    `cachedAt` INTEGER NOT NULL, 
+                    PRIMARY KEY(`id`)
+                )
+            """)
+
+            database.execSQL("""
+                CREATE TABLE `games` (
+                    `id` TEXT NOT NULL, 
+                    `userId` TEXT NOT NULL, 
+                    `gameMode` TEXT NOT NULL, 
+                    `totalRounds` INTEGER NOT NULL, 
+                    `currentRound` INTEGER NOT NULL, 
+                    `score` INTEGER NOT NULL, 
+                    `isCompleted` INTEGER NOT NULL, 
+                    `createdAt` INTEGER NOT NULL, 
+                    `startedAt` INTEGER, 
+                    `completedAt` INTEGER, 
+                    `duration` INTEGER, 
+                    PRIMARY KEY(`id`)
+                )
+            """)
+
+            database.execSQL("""
+                CREATE TABLE `guesses` (
+                    `id` TEXT NOT NULL, 
+                    `gameId` TEXT NOT NULL, 
+                    `locationId` TEXT NOT NULL, 
+                    `guessLat` REAL NOT NULL, 
+                    `guessLng` REAL NOT NULL, 
+                    `actualLat` REAL NOT NULL, 
+                    `actualLng` REAL NOT NULL, 
+                    `distance` REAL NOT NULL, 
+                    `score` INTEGER NOT NULL, 
+                    `timeSpent` INTEGER NOT NULL, 
+                    `submittedAt` INTEGER NOT NULL, 
+                    PRIMARY KEY(`id`)
+                )
+            """)
+
+            // 3. Alle Indizes neu erstellen
+            database.execSQL("CREATE INDEX IF NOT EXISTS `index_games_userId` ON `games` (`userId`)")
+            database.execSQL("CREATE INDEX IF NOT EXISTS `index_locations_isUsed_isCached` ON `locations` (`isUsed`, `isCached`)")
+
+            // 4. Notwendige Start-Daten einfügen
+            database.execSQL("""
+                INSERT INTO users (id, username, email, createdAt) 
+                VALUES ('emergency_user', 'Emergency User', 'emergency@local.com', ${System.currentTimeMillis()})
+            """)
+            database.execSQL("""
+                INSERT INTO locations (id, latitude, longitude, imageUrl, country, city, cachedAt)
+                VALUES ('fallback_paris', 48.8566, 2.3522, 'https://images.unsplash.com/photo-1502602898536-47ad22581b52?w=800', 'France', 'Paris', ${System.currentTimeMillis()})
+            """)
+        }
+    }
+
     @Provides
     @Singleton
     fun provideAppDatabase(@ApplicationContext context: Context): AppDatabase {
@@ -195,7 +422,9 @@ object DatabaseModule {
             MIGRATION_2_3,
             MIGRATION_3_4,
             MIGRATION_4_5,
-            MIGRATION_5_6
+            MIGRATION_5_6,
+            MIGRATION_6_7,
+            MIGRATION_7_8 // Neue, saubere Migration
         )
         .setQueryExecutor(Executors.newFixedThreadPool(4))
         .setTransactionExecutor(Executors.newFixedThreadPool(2))
