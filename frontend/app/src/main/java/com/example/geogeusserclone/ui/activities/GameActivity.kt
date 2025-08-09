@@ -25,13 +25,15 @@ import com.example.geogeusserclone.data.models.GameState
 import com.example.geogeusserclone.data.database.entities.GuessEntity
 import com.example.geogeusserclone.ui.components.GameCompletionScreen
 import com.example.geogeusserclone.ui.components.RoundResultView
+import com.example.geogeusserclone.ui.components.LocationImageScreen
+import com.example.geogeusserclone.ui.components.GuessMapView
+import com.example.geogeusserclone.ui.components.Enhanced360StreetView
 import com.example.geogeusserclone.ui.theme.GeoGeusserCloneTheme
 import com.example.geogeusserclone.utils.DistanceCalculator
 import com.example.geogeusserclone.utils.enableEdgeToEdge
 import com.example.geogeusserclone.viewmodels.GameViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.delay
-import com.example.geogeusserclone.ui.components.Enhanced360StreetView
 
 @AndroidEntryPoint
 class GameActivity : ComponentActivity() {
@@ -150,12 +152,29 @@ fun GameScreen(
                 }
 
                 gameState.showMap -> {
-                    MapViewScreen(
-                        onGuessSubmitted = { lat, lng ->
-                            gameViewModel.submitGuess(lat, lng)
-                        },
-                        onBackToImage = { gameViewModel.hideMap() }
-                    )
+                    val currentLocation = gameState.currentLocation
+                    if (currentLocation != null) {
+                        GuessMapView(
+                            onGuessSelected = { lat, lng ->
+                                gameViewModel.submitGuess(lat, lng)
+                            },
+                            onMapClose = { gameViewModel.hideMap() },
+                            actualLocation = org.osmdroid.util.GeoPoint(
+                                currentLocation.latitude,
+                                currentLocation.longitude
+                            ),
+                            guessLocation = null,
+                            showLocationReveal = false
+                        )
+                    } else {
+                        // Fallback wenn keine Location verfügbar
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("Keine Location verfügbar")
+                        }
+                    }
                 }
 
                 else -> {
@@ -230,13 +249,41 @@ fun LocationImageScreen(
         )
 
         // Enhanced 360° StreetView statt normalem AsyncImage
-        Enhanced360StreetView(
-            imageUrl = location.imageUrl,
-            onNavigationClick = onShowMap,
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-        )
+        if (location.imageUrl.isNotBlank()) {
+            Enhanced360StreetView(
+                imageUrl = location.imageUrl,
+                onNavigationClick = onShowMap,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+            )
+        } else {
+            // Fallback für leere imageUrl - zeige Placeholder
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        Icons.Default.Place,
+                        contentDescription = "Location Placeholder",
+                        modifier = Modifier.size(64.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "Kein Bild verfügbar\n${location.city}, ${location.country}",
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                }
+            }
+        }
 
         // Anweisungen
         Card(

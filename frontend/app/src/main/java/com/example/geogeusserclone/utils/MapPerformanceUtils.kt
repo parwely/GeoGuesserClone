@@ -125,16 +125,32 @@ object MapPerformanceUtils {
     }
 
     /**
-     * Cleanup Map Resources
+     * Cleanup Map Resources - Verbessert für Memory-sicherheit
      */
     fun cleanupMapResources(mapView: MapView?) {
         mapView?.let { map ->
             try {
-                map.onDetach()
+                // Stoppe alle Background-Threads vor Cleanup
+                map.onPause()
+
+                // Cleanup Overlays
                 map.overlays.clear()
-                map.tileProvider?.clearTileCache()
+
+                // Cleanup Tile Provider
+                map.tileProvider?.let { provider ->
+                    try {
+                        provider.clearTileCache()
+                        provider.detach()
+                    } catch (e: Exception) {
+                        // Silent fail
+                    }
+                }
+
+                // Final detach
+                map.onDetach()
+
             } catch (e: Exception) {
-                // Silent cleanup
+                // Silent cleanup - verhindert Crashes
             }
         }
     }

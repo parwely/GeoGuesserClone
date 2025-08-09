@@ -25,6 +25,12 @@ object NetworkModule {
 
     @Provides
     @Singleton
+    fun provideTokenManager(@ApplicationContext context: Context): TokenManager {
+        return TokenManager(context)
+    }
+
+    @Provides
+    @Singleton
     fun provideCache(@ApplicationContext context: Context): Cache {
         val cacheSize = 10 * 1024 * 1024L // 10 MB
         return Cache(context.cacheDir, cacheSize)

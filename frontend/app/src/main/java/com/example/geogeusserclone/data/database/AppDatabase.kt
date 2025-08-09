@@ -13,7 +13,7 @@ import com.example.geogeusserclone.data.database.entities.*
         GameEntity::class,
         GuessEntity::class
     ],
-    version = 5,
+    version = 6, // Version erhöht von 5 auf 6
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

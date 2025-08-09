@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.geogeusserclone.data.database.entities.GameEntity
 import com.example.geogeusserclone.data.database.entities.GuessEntity
 import com.example.geogeusserclone.data.database.entities.LocationEntity
+import com.example.geogeusserclone.data.database.entities.UserEntity
 import com.example.geogeusserclone.data.models.GameState
 import com.example.geogeusserclone.data.repositories.GameRepository
 import com.example.geogeusserclone.data.repositories.LocationRepository
@@ -113,10 +114,31 @@ class GameViewModel @Inject constructor(
 
     private suspend fun startOfflineGame(userId: String) {
         try {
+            // Stelle sicher, dass User existiert bevor Game erstellt wird
+            val existingUser = userRepository.getCurrentUser()
+            val actualUserId = if (existingUser != null) {
+                existingUser.id
+            } else {
+                // Erstelle Emergency User falls keiner existiert
+                val emergencyUser = UserEntity(
+                    id = userId,
+                    username = "Offline User",
+                    email = "offline@local.com",
+                    authToken = null,
+                    totalScore = 0,
+                    gamesPlayed = 0,
+                    bestScore = 0,
+                    lastLoginAt = System.currentTimeMillis(),
+                    createdAt = System.currentTimeMillis()
+                )
+                userRepository.insertEmergencyUser(emergencyUser)
+                userId
+            }
+
             // Erstelle minimales Offline-Spiel
             val offlineGame = GameEntity(
                 id = "offline_${System.currentTimeMillis()}",
-                userId = userId,
+                userId = actualUserId,
                 gameMode = "single",
                 totalRounds = 5,
                 currentRound = 1,

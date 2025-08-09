@@ -107,6 +107,10 @@ class UserRepository @Inject constructor(
         }
     }
 
+    suspend fun insertEmergencyUser(user: UserEntity) {
+        userDao.insertUser(user)
+    }
+
     private fun createOfflineUser(email: String, username: String = "Offline User"): UserEntity {
         return UserEntity(
             id = UUID.randomUUID().toString(),

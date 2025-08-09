@@ -75,6 +75,113 @@ object DatabaseModule {
         }
     }
 
+    private val MIGRATION_5_6 = object : Migration(5, 6) {
+        override fun migrate(database: SupportSQLiteDatabase) {
+            // Version 6: Foreign Key und Offline Mode Fixes
+
+            // Prüfe ob games Tabelle existiert bevor wir sie bearbeiten
+            val cursor = database.query("SELECT name FROM sqlite_master WHERE type='table' AND name='games'")
+            val gamesTableExists = cursor.moveToFirst()
+            cursor.close()
+
+            if (gamesTableExists) {
+                // Temporäre Tabellen erstellen ohne Foreign Key Constraints
+                database.execSQL("""
+                    CREATE TABLE games_temp (
+                        id TEXT PRIMARY KEY NOT NULL,
+                        userId TEXT NOT NULL,
+                        gameMode TEXT NOT NULL DEFAULT 'classic',
+                        totalRounds INTEGER NOT NULL DEFAULT 5,
+                        currentRound INTEGER NOT NULL DEFAULT 1,
+                        score INTEGER NOT NULL DEFAULT 0,
+                        isCompleted INTEGER NOT NULL DEFAULT 0,
+                        createdAt INTEGER NOT NULL DEFAULT ${System.currentTimeMillis()},
+                        startedAt INTEGER,
+                        completedAt INTEGER,
+                        duration INTEGER
+                    )
+                """)
+
+                // Daten kopieren falls Tabelle Daten hat
+                try {
+                    database.execSQL("""
+                        INSERT INTO games_temp 
+                        SELECT id, userId, gameMode, totalRounds, currentRound, score, isCompleted, createdAt, startedAt, completedAt, duration 
+                        FROM games
+                    """)
+                } catch (e: Exception) {
+                    // Falls Spalten fehlen, erstelle nur Basis-Daten
+                    database.execSQL("""
+                        INSERT INTO games_temp (id, userId, gameMode, totalRounds, currentRound, score, isCompleted, createdAt)
+                        SELECT id, userId, 
+                               COALESCE(gameMode, 'classic') as gameMode,
+                               COALESCE(totalRounds, 5) as totalRounds,
+                               COALESCE(currentRound, 1) as currentRound,
+                               COALESCE(score, 0) as score,
+                               COALESCE(isCompleted, 0) as isCompleted,
+                               COALESCE(createdAt, ${System.currentTimeMillis()}) as createdAt
+                        FROM games
+                    """)
+                }
+
+                // Alte Tabelle löschen und neue umbenennen
+                database.execSQL("DROP TABLE games")
+                database.execSQL("ALTER TABLE games_temp RENAME TO games")
+            } else {
+                // Falls games Tabelle nicht existiert, erstelle sie neu
+                database.execSQL("""
+                    CREATE TABLE games (
+                        id TEXT PRIMARY KEY NOT NULL,
+                        userId TEXT NOT NULL,
+                        gameMode TEXT NOT NULL DEFAULT 'classic',
+                        totalRounds INTEGER NOT NULL DEFAULT 5,
+                        currentRound INTEGER NOT NULL DEFAULT 1,
+                        score INTEGER NOT NULL DEFAULT 0,
+                        isCompleted INTEGER NOT NULL DEFAULT 0,
+                        createdAt INTEGER NOT NULL DEFAULT ${System.currentTimeMillis()},
+                        startedAt INTEGER,
+                        completedAt INTEGER,
+                        duration INTEGER
+                    )
+                """)
+            }
+
+            // Indizes neu erstellen ohne Foreign Key Constraints
+            database.execSQL("CREATE INDEX IF NOT EXISTS `index_games_userId` ON `games` (`userId`)")
+            database.execSQL("CREATE INDEX IF NOT EXISTS `index_games_isCompleted` ON `games` (`isCompleted`)")
+            database.execSQL("CREATE INDEX IF NOT EXISTS `index_games_createdAt` ON `games` (`createdAt`)")
+            database.execSQL("CREATE INDEX IF NOT EXISTS `index_games_completedAt` ON `games` (`completedAt`)")
+
+            // Prüfe ob users Tabelle existiert
+            val usersCursor = database.query("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")
+            val usersTableExists = usersCursor.moveToFirst()
+            usersCursor.close()
+
+            if (!usersTableExists) {
+                // Erstelle users Tabelle falls sie nicht existiert
+                database.execSQL("""
+                    CREATE TABLE users (
+                        id TEXT PRIMARY KEY NOT NULL,
+                        username TEXT NOT NULL,
+                        email TEXT NOT NULL,
+                        authToken TEXT,
+                        totalScore INTEGER NOT NULL DEFAULT 0,
+                        gamesPlayed INTEGER NOT NULL DEFAULT 0,
+                        bestScore INTEGER NOT NULL DEFAULT 0,
+                        lastLoginAt INTEGER NOT NULL DEFAULT 0,
+                        createdAt INTEGER NOT NULL DEFAULT ${System.currentTimeMillis()}
+                    )
+                """)
+            }
+
+            // Emergency User erstellen falls nicht vorhanden
+            database.execSQL("""
+                INSERT OR IGNORE INTO users (id, username, email, authToken, totalScore, gamesPlayed, bestScore, lastLoginAt, createdAt)
+                VALUES ('emergency_user', 'Emergency User', 'emergency@local.com', NULL, 0, 0, 0, ${System.currentTimeMillis()}, ${System.currentTimeMillis()})
+            """)
+        }
+    }
+
     @Provides
     @Singleton
     fun provideAppDatabase(@ApplicationContext context: Context): AppDatabase {
@@ -87,7 +194,8 @@ object DatabaseModule {
             MIGRATION_1_2,
             MIGRATION_2_3,
             MIGRATION_3_4,
-            MIGRATION_4_5
+            MIGRATION_4_5,
+            MIGRATION_5_6
         )
         .setQueryExecutor(Executors.newFixedThreadPool(4))
         .setTransactionExecutor(Executors.newFixedThreadPool(2))

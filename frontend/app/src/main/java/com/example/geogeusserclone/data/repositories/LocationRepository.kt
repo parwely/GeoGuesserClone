@@ -4,6 +4,7 @@ import com.example.geogeusserclone.data.database.dao.LocationDao
 import com.example.geogeusserclone.data.database.entities.LocationEntity
 import com.example.geogeusserclone.data.network.ApiService
 import com.example.geogeusserclone.data.network.MapillaryApiService
+import com.example.geogeusserclone.data.network.MapillaryImageDetails
 import com.example.geogeusserclone.utils.Constants
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -144,18 +145,117 @@ class LocationRepository @Inject constructor(
 
     private suspend fun getLocationFromMapillary(): Result<LocationEntity> {
         return try {
-            // Mapillary Fallback Logic (vereinfacht)
-            val fallbackLocations = createFallbackLocationsWithMapillary()
+            println("LocationRepository: Versuche Mapillary-Fallback...")
+
+            // Zufällige bekannte Städte für Mapillary-Suche
+            val searchCities = listOf(
+                Pair(48.8566, 2.3522),   // Paris
+                Pair(51.5074, -0.1278),  // London
+                Pair(40.7128, -74.0060), // New York
+                Pair(52.5200, 13.4050),  // Berlin
+                Pair(41.9028, 12.4964),  // Rom
+                Pair(35.6762, 139.6503)  // Tokyo
+            )
+
+            val randomCity = searchCities.random()
+            val (lat, lng) = randomCity
+
+            // Erstelle BoundingBox um die Stadt (ca. 10km Radius)
+            val latOffset = 0.1 // ca. 11km
+            val lngOffset = 0.1
+            val bbox = "${lng - lngOffset},${lat - latOffset},${lng + lngOffset},${lat + latOffset}"
+
+            // Versuche Mapillary API-Call
+            val response = withTimeoutOrNull(8000L) {
+                mapillaryApiService.getImagesNearby(
+                    bbox = bbox,
+                    isPano = true, // Nur 360° Panoramen
+                    limit = 5,
+                    accessToken = Constants.MAPILLARY_ACCESS_TOKEN
+                )
+            }
+
+            if (response?.isSuccessful == true) {
+                val mapillaryResponse = response.body()!!
+                if (mapillaryResponse.data.isNotEmpty()) {
+                    val mapillaryImage = mapillaryResponse.data.random()
+                    val coords = mapillaryImage.geometry.coordinates
+
+                    // Hole detailed Image info für Download-URL
+                    val imageDetails = getMapillaryImageDetails(mapillaryImage.id)
+                    val imageUrl = imageDetails.getOrNull()?.thumb_1024_url
+                        ?: mapillaryImage.thumb_1024_url
+                        ?: mapillaryImage.thumb_256_url
+                        ?: ""
+
+                    if (imageUrl.isNotEmpty()) {
+                        val locationEntity = LocationEntity(
+                            id = "mapillary_${mapillaryImage.id}",
+                            latitude = coords[1], // Mapillary: [lng, lat]
+                            longitude = coords[0],
+                            imageUrl = imageUrl,
+                            country = getCityName(coords[1], coords[0]).first,
+                            city = getCityName(coords[1], coords[0]).second,
+                            difficulty = 3, // Mapillary-Locations sind meist schwieriger
+                            isCached = true,
+                            isUsed = false
+                        )
+
+                        locationDao.insertLocation(locationEntity)
+                        locationDao.markLocationAsUsed(locationEntity.id)
+
+                        println("LocationRepository: Mapillary-Location erfolgreich geladen: ${locationEntity.city}")
+                        return Result.success(locationEntity)
+                    }
+                }
+            }
+
+            println("LocationRepository: Mapillary-API nicht verfügbar, verwende statische Fallbacks")
+            // Fallback auf statische Locations
+            val fallbackLocations = createFallbackLocations()
             if (fallbackLocations.isNotEmpty()) {
                 locationDao.insertLocations(fallbackLocations)
                 val randomLocation = fallbackLocations.random()
                 locationDao.markLocationAsUsed(randomLocation.id)
+                println("LocationRepository: Statischer Fallback verwendet: ${randomLocation.city}")
                 Result.success(randomLocation)
             } else {
-                Result.failure(Exception("Mapillary nicht verfügbar"))
+                Result.failure(Exception("Keine Fallback-Locations verfügbar"))
+            }
+        } catch (e: Exception) {
+            println("LocationRepository: Mapillary-Fehler: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    private suspend fun getMapillaryImageDetails(imageId: String): Result<MapillaryImageDetails> {
+        return try {
+            val response = mapillaryApiService.getImageDetails(
+                imageId = imageId,
+                accessToken = Constants.MAPILLARY_ACCESS_TOKEN
+            )
+
+            if (response.isSuccessful) {
+                val details = response.body()!!
+                Result.success(details)
+            } else {
+                Result.failure(Exception("Mapillary Image Details API Fehler: ${response.code()}"))
             }
         } catch (e: Exception) {
             Result.failure(e)
+        }
+    }
+
+    private fun getCityName(lat: Double, lng: Double): Pair<String, String> {
+        // Einfache Zuordnung basierend auf Koordinaten
+        return when {
+            lat in 48.0..49.0 && lng in 2.0..3.0 -> Pair("France", "Paris")
+            lat in 51.0..52.0 && lng in -1.0..0.0 -> Pair("United Kingdom", "London")
+            lat in 40.0..41.0 && lng in -75.0..-73.0 -> Pair("United States", "New York")
+            lat in 52.0..53.0 && lng in 13.0..14.0 -> Pair("Germany", "Berlin")
+            lat in 41.0..42.0 && lng in 12.0..13.0 -> Pair("Italy", "Rome")
+            lat in 35.0..36.0 && lng in 139.0..140.0 -> Pair("Japan", "Tokyo")
+            else -> Pair("Unknown", "Unknown City")
         }
     }
 
