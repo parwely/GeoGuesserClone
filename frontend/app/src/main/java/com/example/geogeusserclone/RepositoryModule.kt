@@ -57,16 +57,4 @@ object RepositoryModule {
             userRepository = userRepository
         )
     }
-
-    @Provides
-    @Singleton
-    fun provideLocationCacheRepository(
-        apiService: ApiService,
-        database: AppDatabase
-    ): LocationCacheRepository {
-        return LocationCacheRepository(
-            apiService = apiService,
-            locationDao = database.locationDao()
-        )
-    }
 }

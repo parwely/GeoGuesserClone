@@ -25,9 +25,11 @@ import com.example.geogeusserclone.utils.MemoryManager
 fun LocationImageScreen(
     location: LocationEntity,
     timeRemaining: Long,
-    onShowMap: () -> Unit
+    onShowMap: () -> Unit,
+    onPan: (Float) -> Unit // Hinzugefügt für die Interaktion
 ) {
     val context = LocalContext.current
+    var rotation by remember { mutableFloatStateOf(0f) }
 
     // Automatisches Memory Management
     MemoryManager.AutoMemoryManagement(context)
@@ -35,19 +37,36 @@ fun LocationImageScreen(
     Box(
         modifier = Modifier.fillMaxSize()
     ) {
-        // Street View Image / Fallback Image
-        AsyncImage(
-            model = ImageRequest.Builder(context)
-                .data(location.imageUrl)
-                .crossfade(true)
-                .build(),
-            contentDescription = "Location Image - ${location.city}, ${location.country}",
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop,
-            error = androidx.compose.ui.res.painterResource(
-                android.R.drawable.ic_menu_gallery
+        // Ersetze statisches Bild durch interaktive Street-View-Komponente
+        if (location.imageUrl.isNotBlank()) {
+            InteractiveStreetView(
+                imageUrl = location.imageUrl,
+                modifier = Modifier.fillMaxSize(),
+                onPan = { delta ->
+                    rotation += delta
+                    onPan(delta)
+                }
             )
-        )
+        } else {
+            // Behalte den Lade-Indikator für leere URLs
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    CircularProgressIndicator()
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "Lade Location...",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                }
+            }
+        }
 
         // Gradient Overlay für bessere Lesbarkeit
         Box(
@@ -162,27 +181,6 @@ fun LocationImageScreen(
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium
             )
-        }
-
-        // Loading Indicator für langsame Bilder
-        if (location.imageUrl.isBlank()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    CircularProgressIndicator()
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = "Lade Location...",
-                        style = MaterialTheme.typography.bodyLarge
-                    )
-                }
-            }
         }
     }
 }

@@ -146,25 +146,25 @@ class LocationRepository @Inject constructor(
     private suspend fun getLocationFromMapillary(): Result<LocationEntity> {
         return try {
             println("LocationRepository: Versuche Mapillary-Fallback...")
-
+            
             // Zufällige bekannte Städte für Mapillary-Suche
             val searchCities = listOf(
                 Pair(48.8566, 2.3522),   // Paris
-                Pair(51.5074, -0.1278),  // London
+                Pair(51.5074, -0.1278),  // London  
                 Pair(40.7128, -74.0060), // New York
                 Pair(52.5200, 13.4050),  // Berlin
                 Pair(41.9028, 12.4964),  // Rom
                 Pair(35.6762, 139.6503)  // Tokyo
             )
-
+            
             val randomCity = searchCities.random()
             val (lat, lng) = randomCity
-
+            
             // Erstelle BoundingBox um die Stadt (ca. 10km Radius)
             val latOffset = 0.1 // ca. 11km
             val lngOffset = 0.1
             val bbox = "${lng - lngOffset},${lat - latOffset},${lng + lngOffset},${lat + latOffset}"
-
+            
             // Versuche Mapillary API-Call
             val response = withTimeoutOrNull(8000L) {
                 mapillaryApiService.getImagesNearby(
@@ -174,20 +174,20 @@ class LocationRepository @Inject constructor(
                     accessToken = Constants.MAPILLARY_ACCESS_TOKEN
                 )
             }
-
+            
             if (response?.isSuccessful == true) {
                 val mapillaryResponse = response.body()!!
                 if (mapillaryResponse.data.isNotEmpty()) {
                     val mapillaryImage = mapillaryResponse.data.random()
                     val coords = mapillaryImage.geometry.coordinates
-
+                    
                     // Hole detailed Image info für Download-URL
                     val imageDetails = getMapillaryImageDetails(mapillaryImage.id)
-                    val imageUrl = imageDetails.getOrNull()?.thumb_1024_url
-                        ?: mapillaryImage.thumb_1024_url
+                    val imageUrl = imageDetails.getOrNull()?.thumb_1024_url 
+                        ?: mapillaryImage.thumb_1024_url 
                         ?: mapillaryImage.thumb_256_url
                         ?: ""
-
+                    
                     if (imageUrl.isNotEmpty()) {
                         val locationEntity = LocationEntity(
                             id = "mapillary_${mapillaryImage.id}",
@@ -200,16 +200,16 @@ class LocationRepository @Inject constructor(
                             isCached = true,
                             isUsed = false
                         )
-
+                        
                         locationDao.insertLocation(locationEntity)
                         locationDao.markLocationAsUsed(locationEntity.id)
-
+                        
                         println("LocationRepository: Mapillary-Location erfolgreich geladen: ${locationEntity.city}")
                         return Result.success(locationEntity)
                     }
                 }
             }
-
+            
             println("LocationRepository: Mapillary-API nicht verfügbar, verwende statische Fallbacks")
             // Fallback auf statische Locations
             val fallbackLocations = createFallbackLocations()
@@ -227,14 +227,14 @@ class LocationRepository @Inject constructor(
             Result.failure(e)
         }
     }
-
+    
     private suspend fun getMapillaryImageDetails(imageId: String): Result<MapillaryImageDetails> {
         return try {
             val response = mapillaryApiService.getImageDetails(
                 imageId = imageId,
                 accessToken = Constants.MAPILLARY_ACCESS_TOKEN
             )
-
+            
             if (response.isSuccessful) {
                 val details = response.body()!!
                 Result.success(details)
@@ -245,7 +245,7 @@ class LocationRepository @Inject constructor(
             Result.failure(e)
         }
     }
-
+    
     private fun getCityName(lat: Double, lng: Double): Pair<String, String> {
         // Einfache Zuordnung basierend auf Koordinaten
         return when {

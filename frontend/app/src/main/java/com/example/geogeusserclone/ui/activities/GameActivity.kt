@@ -5,35 +5,22 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Place // Verwende Place statt Map
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
 import com.example.geogeusserclone.data.models.GameState
 import com.example.geogeusserclone.data.database.entities.GuessEntity
 import com.example.geogeusserclone.ui.components.GameCompletionScreen
-import com.example.geogeusserclone.ui.components.RoundResultView
-import com.example.geogeusserclone.ui.components.LocationImageScreen
 import com.example.geogeusserclone.ui.components.GuessMapView
-import com.example.geogeusserclone.ui.components.Enhanced360StreetView
+import com.example.geogeusserclone.ui.components.LocationImageScreen
+import com.example.geogeusserclone.ui.components.RoundResultView
 import com.example.geogeusserclone.ui.theme.GeoGeusserCloneTheme
-import com.example.geogeusserclone.utils.DistanceCalculator
 import com.example.geogeusserclone.utils.enableEdgeToEdge
 import com.example.geogeusserclone.viewmodels.GameViewModel
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 
 @AndroidEntryPoint
 class GameActivity : ComponentActivity() {
@@ -46,317 +33,103 @@ class GameActivity : ComponentActivity() {
 
         setContent {
             GeoGeusserCloneTheme {
+                val gameState by gameViewModel.uiState.collectAsState()
+
+                LaunchedEffect(Unit) {
+                    gameViewModel.startNewGame()
+                }
+
                 GameScreen(
-                    gameViewModel = gameViewModel,
-                    onBackPressed = { finish() }
+                    gameState = gameState,
+                    onGuess = { lat, lng -> gameViewModel.submitGuess(lat, lng) },
+                    onNextRound = { gameViewModel.proceedToNextRound() },
+                    onShowMap = { gameViewModel.showMap() },
+                    onHideMap = { gameViewModel.hideMap() },
+                    onPan = { /* Pan-Event wird bereits in LocationImageScreen behandelt */ },
+                    onBack = { finish() },
+                    getGuesses = { gameViewModel.getGameGuesses() }
                 )
             }
         }
-
-        // Starte neues Spiel
-        gameViewModel.startNewGame()
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GameScreen(
-    gameViewModel: GameViewModel,
-    onBackPressed: () -> Unit
+    gameState: GameState,
+    onGuess: (Double, Double) -> Unit,
+    onNextRound: () -> Unit,
+    onShowMap: () -> Unit,
+    onHideMap: () -> Unit,
+    onPan: (Float) -> Unit,
+    onBack: () -> Unit,
+    getGuesses: () -> Flow<List<GuessEntity>>
 ) {
-    val gameState by gameViewModel.uiState.collectAsStateWithLifecycle()
-    val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(gameState.error) {
-        gameState.error?.let { error ->
-            // Zeige Error-Snackbar
-            delay(3000)
-            gameViewModel.clearError()
+        gameState.error?.let {
+            snackbarHostState.showSnackbar(
+                message = it,
+                duration = SnackbarDuration.Short
+            )
         }
     }
 
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        Text("GeoGuesser")
-
-                        val currentGame = gameState.currentGame
-                        if (currentGame != null) {
-                            Text(
-                                text = "Runde ${currentGame.currentRound}/${currentGame.totalRounds}",
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                            Text(
-                                text = "${currentGame.score} Punkte",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBackPressed) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück")
-                    }
-                },
-                actions = {
-                    if (gameState.currentLocation != null && !gameState.showMap) {
-                        IconButton(onClick = { gameViewModel.showMap() }) {
-                            Icon(Icons.Default.Place, contentDescription = "Karte anzeigen")
-                        }
-                    }
-                }
-            )
-        }
-    ) { paddingValues ->
+        snackbarHost = { SnackbarHost(snackbarHostState) }
+    ) { padding ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
+                .padding(padding)
         ) {
-            when {
-                gameState.isLoading -> {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator()
-                    }
-                }
-
-                gameState.showGameCompletion -> {
-                    val currentGame = gameState.currentGame
-                    if (currentGame != null) {
-                        val guesses by gameViewModel.getGameGuesses().collectAsStateWithLifecycle(initialValue = emptyList())
-
-                        GameCompletionScreen(
-                            game = currentGame,
-                            guesses = guesses,
-                            onPlayAgain = { gameViewModel.startNewGame() },
-                            onMainMenu = onBackPressed
-                        )
-                    }
-                }
-
-                gameState.showRoundResult && gameState.revealGuessResult != null -> {
-                    RoundResultView(
-                        guess = gameState.revealGuessResult,
-                        onNextRound = { gameViewModel.proceedToNextRound() }
-                    )
-                }
-
-                gameState.showMap -> {
-                    val currentLocation = gameState.currentLocation
-                    if (currentLocation != null) {
-                        GuessMapView(
-                            onGuessSelected = { lat, lng ->
-                                gameViewModel.submitGuess(lat, lng)
-                            },
-                            onMapClose = { gameViewModel.hideMap() },
-                            actualLocation = org.osmdroid.util.GeoPoint(
-                                currentLocation.latitude,
-                                currentLocation.longitude
-                            ),
-                            guessLocation = null,
-                            showLocationReveal = false
-                        )
-                    } else {
-                        // Fallback wenn keine Location verfügbar
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("Keine Location verfügbar")
-                        }
-                    }
-                }
-
-                else -> {
-                    val currentLocation = gameState.currentLocation
-                    if (currentLocation != null) {
-                        LocationImageScreen(
-                            location = currentLocation,
-                            timeRemaining = gameState.timeRemaining,
-                            onShowMap = { gameViewModel.showMap() }
-                        )
-                    } else {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("Lade Spiel...")
-                        }
-                    }
-                }
-            }
-
-            // Error Snackbar
-            gameState.error?.let { error ->
+            // Haupt-Spielinhalt
+            if (gameState.isLoading && gameState.currentGame == null) {
                 Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(16.dp),
-                    contentAlignment = Alignment.BottomCenter
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer
-                        )
-                    ) {
-                        Text(
-                            text = error,
-                            modifier = Modifier.padding(16.dp),
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                    }
+                    CircularProgressIndicator()
                 }
+            } else if (gameState.currentLocation != null && !gameState.showGameCompletion) {
+                LocationImageScreen(
+                    location = gameState.currentLocation,
+                    timeRemaining = gameState.timeRemaining,
+                    onShowMap = onShowMap,
+                    onPan = onPan
+                )
             }
-        }
-    }
-}
 
-@Composable
-fun LocationImageScreen(
-    location: com.example.geogeusserclone.data.database.entities.LocationEntity,
-    timeRemaining: Long,
-    onShowMap: () -> Unit
-) {
-    Column(
-        modifier = Modifier.fillMaxSize()
-    ) {
-        // Timer
-        LinearProgressIndicator(
-            progress = { (timeRemaining / 120000f).coerceIn(0f, 1f) },
-            modifier = Modifier.fillMaxWidth(),
-            color = when {
-                timeRemaining > 60000 -> MaterialTheme.colorScheme.primary
-                timeRemaining > 30000 -> Color(0xFFFFC107)
-                else -> MaterialTheme.colorScheme.error
+            // Map-Ansicht zum Raten
+            if (gameState.showMap) {
+                GuessMapView(
+                    onGuessSelected = { lat, lng ->
+                        onGuess(lat, lng)
+                        onHideMap()
+                    },
+                    onMapClose = onHideMap
+                )
             }
-        )
 
-        Text(
-            text = "Zeit: ${timeRemaining / 1000}s",
-            modifier = Modifier.padding(16.dp),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold
-        )
+            // Ergebnis der Runde
+            if (gameState.showRoundResult) {
+                RoundResultView(
+                    guess = gameState.revealGuessResult,
+                    onNextRound = onNextRound
+                )
+            }
 
-        // Enhanced 360° StreetView statt normalem AsyncImage
-        if (location.imageUrl.isNotBlank()) {
-            Enhanced360StreetView(
-                imageUrl = location.imageUrl,
-                onNavigationClick = onShowMap,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-            )
-        } else {
-            // Fallback für leere imageUrl - zeige Placeholder
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Icon(
-                        Icons.Default.Place,
-                        contentDescription = "Location Placeholder",
-                        modifier = Modifier.size(64.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+            // Spiel-Abschluss-Bildschirm
+            if (gameState.showGameCompletion) {
+                val guesses by getGuesses().collectAsState(initial = emptyList())
+                gameState.currentGame?.let { game ->
+                    GameCompletionScreen(
+                        game = game,
+                        guesses = guesses,
+                        onPlayAgain = { /* TODO: Implement Play Again */ },
+                        onMainMenu = onBack
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = "Kein Bild verfügbar\n${location.city}, ${location.country}",
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                        style = MaterialTheme.typography.bodyLarge
-                    )
-                }
-            }
-        }
-
-        // Anweisungen
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp)
-            ) {
-                Text(
-                    text = "Wo befindet sich dieser Ort?",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Ziehe mit dem Finger um dich umzusehen. Tippe auf den 📍 Button um deine Vermutung zu platzieren.",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            }
-        }
-
-        Button(
-            onClick = onShowMap,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-        ) {
-            Icon(Icons.Default.Place, contentDescription = null)
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("Karte öffnen")
-        }
-    }
-}
-
-@Composable
-fun MapViewScreen(
-    onGuessSubmitted: (Double, Double) -> Unit,
-    onBackToImage: () -> Unit
-) {
-    // Vereinfachte Map-Implementation
-    Column(
-        modifier = Modifier.fillMaxSize()
-    ) {
-        Button(
-            onClick = onBackToImage,
-            modifier = Modifier.padding(16.dp)
-        ) {
-            Text("Zurück zum Bild")
-        }
-
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.LightGray),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = "Karte hier implementieren",
-                    style = MaterialTheme.typography.titleLarge
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                Button(
-                    onClick = {
-                        // Dummy-Guess für Test
-                        onGuessSubmitted(48.8566, 2.3522) // Paris
-                    }
-                ) {
-                    Text("Test-Guess abgeben")
                 }
             }
         }
