@@ -38,8 +38,6 @@
 - **Alternative**: Mapbox SDK (50k kostenlose Map Loads)
 - **Fallback**: Custom Bitmap-Weltkarte
 - **Tiles**: Vorgeladene OSM-Tiles in Assets
-- **Map Compose** https://github.com/p-lr/MapCompose
-- **OSM Tile Manager** https://github.com/feczkob/osm-tile-manager
 
 ### Image Sources
 - **Wikimedia Commons**: Geotagged Photos
