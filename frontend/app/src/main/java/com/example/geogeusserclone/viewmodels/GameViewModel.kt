@@ -14,6 +14,7 @@ import com.example.geogeusserclone.utils.Constants
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.selects.select
 import javax.inject.Inject
 
 @HiltViewModel
@@ -28,11 +29,16 @@ class GameViewModel @Inject constructor(
 
     private var gameTimer: Job? = null
     private var currentUserId: String? = null
-    private var preloadedLocations = mutableListOf<LocationEntity>()
+
+    // Optimierte Location-Management
+    private val gameLocations = mutableListOf<LocationEntity>()
+    private val usedLocationIds = mutableSetOf<String>()
+    private var locationPreloadJob: Job? = null
+    private var currentLocationIndex = 0
 
     init {
         initializeUser()
-        preloadGameLocations()
+        startLocationPreloading()
     }
 
     private fun initializeUser() {
@@ -41,18 +47,43 @@ class GameViewModel @Inject constructor(
         }
     }
 
-    private fun preloadGameLocations() {
-        viewModelScope.launch(Dispatchers.IO) {
+    private fun startLocationPreloading() {
+        locationPreloadJob = viewModelScope.launch(Dispatchers.IO) {
             try {
-                locationRepository.preloadLocations()
-                // Cache 5 Locations für bessere Performance
-                repeat(5) {
-                    locationRepository.getRandomLocation().getOrNull()?.let { location ->
-                        preloadedLocations.add(location)
+                println("GameViewModel: Starte intelligentes Location-Preloading...")
+
+                // Parallele Location-Beschaffung für garantiert 5 verschiedene Locations
+                val locationJobs = (1..8).map { // Lade 8 um sicher 5 verschiedene zu haben
+                    async {
+                        locationRepository.getRandomLocation().getOrNull()
                     }
                 }
+
+                val results = locationJobs.awaitAll().filterNotNull()
+
+                // Filtere nach eindeutigen Locations basierend auf Koordinaten
+                val uniqueLocations = results
+                    .distinctBy { "${it.latitude}-${it.longitude}" }
+                    .take(5)
+
+                if (uniqueLocations.size >= 5) {
+                    gameLocations.clear()
+                    gameLocations.addAll(uniqueLocations)
+                    println("GameViewModel: ${uniqueLocations.size} eindeutige Locations preloaded")
+                } else {
+                    // Fallback: Fülle mit generierten Locations auf
+                    gameLocations.clear()
+                    gameLocations.addAll(uniqueLocations)
+                    val missingCount = 5 - uniqueLocations.size
+                    gameLocations.addAll(generateUniqueLocations(missingCount, uniqueLocations))
+                    println("GameViewModel: ${gameLocations.size} Locations preloaded (${missingCount} generiert)")
+                }
+
+                usedLocationIds.clear()
+
             } catch (e: Exception) {
-                // Silent fail - App funktioniert weiter ohne Preloading
+                println("GameViewModel: Preloading-Fehler: ${e.message}, verwende Fallback")
+                createFallbackLocations()
             }
         }
     }
@@ -63,20 +94,20 @@ class GameViewModel @Inject constructor(
                 _uiState.update { it.copy(isLoading = true, error = null) }
 
                 val userId = currentUserId ?: "offline_user_${System.currentTimeMillis()}"
-
                 println("GameViewModel: Starte neues Spiel für User: $userId")
 
-                // Erstelle Spiel - mit aggressivem Fallback
-                val gameResult = try {
-                    // Versuche erst Backend
-                    withTimeout(5000L) { // 5 Sekunden Timeout
-                        gameRepository.createGame(userId, "single", 5)
-                    }
-                } catch (e: Exception) {
-                    println("GameViewModel: Backend nicht verfügbar, verwende Offline-Modus: ${e.message}")
-                    // Offline Fallback
-                    gameRepository.createGame(userId, "single", 5)
+                // Warte auf Location-Preloading (max 3 Sekunden)
+                withTimeoutOrNull(3000L) {
+                    locationPreloadJob?.join()
                 }
+
+                // Stelle sicher, dass wir Locations haben
+                if (gameLocations.isEmpty()) {
+                    createFallbackLocations()
+                }
+
+                // Erstelle Spiel mit optimiertem Backend-Aufruf
+                val gameResult = createGameWithFallback(userId)
 
                 gameResult.fold(
                     onSuccess = { game ->
@@ -95,36 +126,67 @@ class GameViewModel @Inject constructor(
                                 gameScore = 0
                             )
                         }
-                        // Lade sofort die erste Location
-                        loadNextLocationWithFallback()
+                        currentLocationIndex = 0
+                        loadNextUniqueLocation()
                     },
                     onFailure = { error ->
-                        println("GameViewModel: Kritischer Fehler: ${error.message}")
-                        // Notfall-Fallback: Starte ohne Backend
-                        startOfflineGame(userId)
+                        println("GameViewModel: Spiel-Erstellung fehlgeschlagen: ${error.message}")
+                        startEmergencyGame(userId)
                     }
                 )
             } catch (e: Exception) {
-                println("GameViewModel: Unerwarteter Fehler: ${e.message}")
-                // Ultimativer Fallback
-                startOfflineGame(currentUserId ?: "emergency_user")
+                println("GameViewModel: Kritischer Fehler: ${e.message}")
+                startEmergencyGame(currentUserId ?: "emergency_user")
             }
         }
     }
 
-    private suspend fun startOfflineGame(userId: String) {
-        try {
-            // Stelle sicher, dass User existiert bevor Game erstellt wird
-            val existingUser = userRepository.getCurrentUser()
-            val actualUserId = if (existingUser != null) {
-                existingUser.id
-            } else {
-                // Erstelle Emergency User falls keiner existiert
+    private suspend fun createGameWithFallback(userId: String): Result<GameEntity> = withContext(Dispatchers.IO) {
+        return@withContext try {
+            // Parallele Versuche: Backend und Offline
+            val backendDeferred = async {
+                try {
+                    withTimeout(4000L) {
+                        gameRepository.createGame(userId, "single", 5)
+                    }
+                } catch (e: Exception) {
+                    Result.failure<GameEntity>(e)
+                }
+            }
+
+            val offlineDeferred = async {
+                delay(4500L) // Warte 4.5s bevor Offline-Fallback
+                createOfflineGame(userId)
+            }
+
+            // Nimm das erste erfolgreiche Ergebnis
+            select<Result<GameEntity>> {
+                backendDeferred.onAwait { result ->
+                    if (result.isSuccess) {
+                        offlineDeferred.cancel()
+                        result
+                    } else {
+                        offlineDeferred.await()
+                    }
+                }
+                offlineDeferred.onAwait { result ->
+                    backendDeferred.cancel()
+                    result
+                }
+            }
+        } catch (e: Exception) {
+            createOfflineGame(userId)
+        }
+    }
+
+    private suspend fun createOfflineGame(userId: String): Result<GameEntity> {
+        return try {
+            // Stelle sicher, dass User existiert
+            val user = userRepository.getCurrentUser() ?: run {
                 val emergencyUser = UserEntity(
                     id = userId,
                     username = "Offline User",
                     email = "offline@local.com",
-                    authToken = null,
                     totalScore = 0,
                     gamesPlayed = 0,
                     bestScore = 0,
@@ -132,13 +194,34 @@ class GameViewModel @Inject constructor(
                     createdAt = System.currentTimeMillis()
                 )
                 userRepository.insertEmergencyUser(emergencyUser)
-                userId
+                emergencyUser
             }
 
-            // Erstelle minimales Offline-Spiel
             val offlineGame = GameEntity(
                 id = "offline_${System.currentTimeMillis()}",
-                userId = actualUserId,
+                userId = user.id,
+                gameMode = "single",
+                totalRounds = 5,
+                currentRound = 1,
+                score = 0,
+                isCompleted = false,
+                createdAt = System.currentTimeMillis(),
+                startedAt = System.currentTimeMillis()
+            )
+
+            Result.success(offlineGame)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    private suspend fun startEmergencyGame(userId: String) {
+        try {
+            createFallbackLocations() // Notfall-Locations erstellen
+
+            val emergencyGame = GameEntity(
+                id = "emergency_${System.currentTimeMillis()}",
+                userId = userId,
                 gameMode = "single",
                 totalRounds = 5,
                 currentRound = 1,
@@ -150,144 +233,118 @@ class GameViewModel @Inject constructor(
 
             _uiState.update {
                 it.copy(
-                    currentGame = offlineGame,
+                    currentGame = emergencyGame,
                     isLoading = false,
                     currentRound = 1,
                     totalRounds = 5,
                     gameScore = 0,
-                    error = "Offline-Modus aktiviert"
+                    error = "Notfall-Modus: Offline-Spiel gestartet"
                 )
             }
 
-            // Lade sofort eine Fallback-Location
-            loadOfflineLocation()
+            currentLocationIndex = 0
+            loadNextUniqueLocation()
         } catch (e: Exception) {
             _uiState.update {
                 it.copy(
                     isLoading = false,
-                    error = "Kritischer Fehler: App kann nicht gestartet werden"
+                    error = "Kritischer Fehler: Spiel kann nicht gestartet werden"
                 )
             }
         }
     }
 
-    private suspend fun loadNextLocationWithFallback() {
-        try {
-            _uiState.update { it.copy(isLoading = true) }
-            
-            println("GameViewModel: Lade nächste Location...")
+    private fun loadNextUniqueLocation() {
+        viewModelScope.launch {
+            try {
+                _uiState.update { it.copy(isLoading = true) }
 
-            // 1. Versuche preloaded Location
-            val location = if (preloadedLocations.isNotEmpty()) {
-                println("GameViewModel: Verwende preloaded Location")
-                preloadedLocations.removeAt(0) // API Level kompatible Alternative zu removeFirst()
-            } else {
-                // 2. Versuche Location Repository mit Timeout
-                println("GameViewModel: Lade Location aus Repository...")
-                try {
-                    withTimeout(8000L) { // 8 Sekunden Timeout
-                        locationRepository.getRandomLocation().getOrNull()
+                val nextLocation = getNextUniqueLocation()
+
+                if (nextLocation != null) {
+                    println("GameViewModel: Lade Location ${currentLocationIndex}: ${nextLocation.city}")
+
+                    _uiState.update { state ->
+                        state.copy(
+                            currentLocation = nextLocation,
+                            isLoading = false,
+                            error = null
+                        )
                     }
-                } catch (e: Exception) {
-                    println("GameViewModel: Repository Timeout, verwende Emergency Location")
-                    null
-                }
-            }
+                    startRoundTimer()
 
-            if (location != null) {
-                println("GameViewModel: Location erfolgreich geladen: ${location.city}")
-                _uiState.update { state ->
-                    state.copy(
-                        currentLocation = location,
+                    // Preload nächste Location im Hintergrund
+                    preloadNextLocationInBackground()
+                } else {
+                    // Keine Locations mehr verfügbar
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            error = "Keine weiteren Locations verfügbar"
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                println("GameViewModel: Fehler beim Location-Laden: ${e.message}")
+                _uiState.update {
+                    it.copy(
                         isLoading = false,
-                        error = null
+                        error = "Fehler beim Laden der Location: ${e.message}"
                     )
                 }
-                startRoundTimer()
-                preloadNextLocationInBackground()
-            } else {
-                // 3. Letzte Rettung: Emergency Location
-                println("GameViewModel: Verwende Emergency Location")
-                loadOfflineLocation()
             }
-        } catch (e: Exception) {
-            println("GameViewModel: Fehler beim Location laden: ${e.message}")
-            loadOfflineLocation()
         }
     }
 
-    private suspend fun loadOfflineLocation() {
-        try {
-            // Erstelle Emergency Location
-            val emergencyLocation = LocationEntity(
-                id = "emergency_${System.currentTimeMillis()}",
-                latitude = 48.8566,
-                longitude = 2.3522,
-                imageUrl = "https://images.unsplash.com/photo-1502602898536-47ad22581b52?w=800",
-                country = "France",
-                city = "Paris",
-                difficulty = 2,
-                isCached = true,
-                isUsed = false
-            )
-
-            _uiState.update { state ->
-                state.copy(
-                    currentLocation = emergencyLocation,
-                    isLoading = false,
-                    error = "Offline-Modus: Fallback-Location verwendet"
-                )
-            }
-            startRoundTimer()
-        } catch (e: Exception) {
-            _uiState.update {
-                it.copy(
-                    isLoading = false,
-                    error = "Kritischer Fehler: Keine Location verfügbar"
-                )
-            }
+    private fun getNextUniqueLocation(): LocationEntity? {
+        return if (currentLocationIndex < gameLocations.size) {
+            val location = gameLocations[currentLocationIndex]
+            usedLocationIds.add(location.id)
+            currentLocationIndex++
+            location
+        } else {
+            null // Alle Locations verwendet
         }
     }
 
     private fun preloadNextLocationInBackground() {
-        if (preloadedLocations.size < 2) {
-            viewModelScope.launch(Dispatchers.IO) {
+        // Background-Preloading für bessere Performance beim nächsten Laden
+        viewModelScope.launch(Dispatchers.IO) {
+            if (currentLocationIndex < gameLocations.size) {
                 try {
-                    locationRepository.getRandomLocation().getOrNull()?.let { nextLocation ->
-                        preloadedLocations.add(nextLocation)
-                        println("GameViewModel: Nächste Location preloaded")
-                    }
+                    // Preload Image für nächste Location
+                    val nextLocation = gameLocations[currentLocationIndex]
+                    // Hier könnte man das Bild vorläufig cachen
+                    println("GameViewModel: Preloading Location ${currentLocationIndex + 1}: ${nextLocation.city}")
                 } catch (e: Exception) {
-                    println("GameViewModel: Preload fehlgeschlagen: ${e.message}")
+                    // Silent fail
                 }
             }
         }
     }
 
-    private suspend fun loadNextLocation() {
-        loadNextLocationWithFallback()
+    private fun generateUniqueLocations(count: Int, existing: List<LocationEntity>): List<LocationEntity> {
+        val existingCoords = existing.map { "${it.latitude}-${it.longitude}" }.toSet()
+        val fallbackLocations = listOf(
+            LocationEntity("gen_paris", 48.8566, 2.3522, "https://images.unsplash.com/photo-1502602898536-47ad22581b52?w=800", "France", "Paris", 2, true, false),
+            LocationEntity("gen_london", 51.5074, -0.1278, "https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=800", "United Kingdom", "London", 2, true, false),
+            LocationEntity("gen_newyork", 40.7128, -74.0060, "https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=800", "United States", "New York", 3, true, false),
+            LocationEntity("gen_tokyo", 35.6762, 139.6503, "https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=800", "Japan", "Tokyo", 4, true, false),
+            LocationEntity("gen_sydney", -33.8688, 151.2093, "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800", "Australia", "Sydney", 3, true, false),
+            LocationEntity("gen_berlin", 52.5200, 13.4050, "https://images.unsplash.com/photo-1587330979470-3016b6702d89?w=800", "Germany", "Berlin", 2, true, false),
+            LocationEntity("gen_rome", 41.9028, 12.4964, "https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=800", "Italy", "Rome", 3, true, false),
+            LocationEntity("gen_barcelona", 41.3851, 2.1734, "https://images.unsplash.com/photo-1539037116277-4db20889f2d4?w=800", "Spain", "Barcelona", 3, true, false)
+        )
+
+        return fallbackLocations
+            .filter { "${it.latitude}-${it.longitude}" !in existingCoords }
+            .take(count)
     }
 
-    private fun startRoundTimer() {
-        gameTimer?.cancel()
-        gameTimer = viewModelScope.launch {
-            var timeLeft = Constants.MAX_ROUND_TIME_MS
-
-            while (timeLeft > 0 && _uiState.value.currentLocation != null && !_uiState.value.showRoundResult) {
-                _uiState.update { it.copy(timeRemaining = timeLeft) }
-                delay(1000)
-                timeLeft -= 1000
-            }
-
-            // Zeit abgelaufen - automatisch schlechten Guess abgeben
-            if (timeLeft <= 0 && !_uiState.value.showRoundResult) {
-                val currentLocation = _uiState.value.currentLocation
-                if (currentLocation != null) {
-                    // Zufällige Position als Guess (sehr schlecht)
-                    submitGuess(0.0, 0.0)
-                }
-            }
-        }
+    private fun createFallbackLocations() {
+        gameLocations.clear()
+        gameLocations.addAll(generateUniqueLocations(5, emptyList()))
+        println("GameViewModel: ${gameLocations.size} Fallback-Locations erstellt")
     }
 
     fun submitGuess(guessLat: Double, guessLng: Double) {
@@ -352,64 +409,37 @@ class GameViewModel @Inject constructor(
         viewModelScope.launch {
             val currentGame = _uiState.value.currentGame ?: return@launch
 
-            if (currentGame.currentRound > currentGame.totalRounds) {
-                // Spiel beenden
-                completeGame()
-            } else {
+            if (currentGame.currentRound < currentGame.totalRounds) {
                 // Nächste Runde
                 _uiState.update { state ->
                     state.copy(
                         showRoundResult = false,
                         revealGuessResult = null,
-                        currentRound = currentGame.currentRound,
+                        showMap = false,
+                        currentRound = currentGame.currentRound + 1,
                         timeRemaining = Constants.MAX_ROUND_TIME_MS
                     )
                 }
-                loadNextLocation()
+
+                loadNextUniqueLocation()
+            } else {
+                // Spiel beendet
+                completeGame()
             }
         }
     }
 
     private suspend fun completeGame() {
-        try {
-            val currentGame = _uiState.value.currentGame ?: return
+        val currentGame = _uiState.value.currentGame ?: return
 
-            gameRepository.completeGame(currentGame.id).fold(
-                onSuccess = { completedGame ->
-                    _uiState.update { state ->
-                        state.copy(
-                            currentGame = completedGame,
-                            showRoundResult = false,
-                            showGameCompletion = true,
-                            revealGuessResult = null
-                        )
-                    }
+        gameRepository.completeGame(currentGame.id)
 
-                    // Sync mit Backend im Hintergrund
-                    syncGameResultWithBackend(completedGame)
-                },
-                onFailure = { error ->
-                    _uiState.update {
-                        it.copy(error = "Fehler beim Abschließen des Spiels: ${error.message}")
-                    }
-                }
+        _uiState.update {
+            it.copy(
+                showGameCompletion = true,
+                showRoundResult = false,
+                showMap = false
             )
-        } catch (e: Exception) {
-            _uiState.update {
-                it.copy(error = "Unerwarteter Fehler beim Spielende: ${e.message}")
-            }
-        }
-    }
-
-    private fun syncGameResultWithBackend(game: GameEntity) {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val guesses = gameRepository.getGuessesByGame(game.id).first()
-                gameRepository.submitCompleteGameResult(game, guesses)
-                // Silent success - Spiel ist bereits lokal gespeichert
-            } catch (e: Exception) {
-                // Silent fail - Spiel bleibt lokal gespeichert
-            }
         }
     }
 
@@ -421,17 +451,32 @@ class GameViewModel @Inject constructor(
         _uiState.update { it.copy(showMap = false) }
     }
 
-    fun clearError() {
-        _uiState.update { it.copy(error = null) }
+    fun getGameGuesses(): Flow<List<GuessEntity>> {
+        val currentGame = _uiState.value.currentGame
+        return if (currentGame != null) {
+            gameRepository.getGuessesByGame(currentGame.id)
+        } else {
+            flowOf(emptyList())
+        }
     }
 
-    fun getGameGuesses(): Flow<List<GuessEntity>> {
-        val gameId = _uiState.value.currentGame?.id ?: return flowOf(emptyList())
-        return gameRepository.getGuessesByGame(gameId)
+    private fun startRoundTimer() {
+        gameTimer?.cancel()
+        gameTimer = viewModelScope.launch {
+            var timeLeft = Constants.MAX_ROUND_TIME_MS
+            while (timeLeft > 0) {
+                _uiState.update { it.copy(timeRemaining = timeLeft) }
+                delay(1000)
+                timeLeft -= 1000
+            }
+            // Zeit abgelaufen
+            submitGuess(0.0, 0.0) // Default guess bei Timeout
+        }
     }
 
     override fun onCleared() {
         super.onCleared()
         gameTimer?.cancel()
+        locationPreloadJob?.cancel()
     }
 }

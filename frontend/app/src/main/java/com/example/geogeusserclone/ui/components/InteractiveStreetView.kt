@@ -4,15 +4,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -22,240 +15,319 @@ import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImagePainter
 import coil.compose.rememberAsyncImagePainter
 import coil.request.ImageRequest
+import coil.size.Size
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlin.math.cos
-import kotlin.math.sin
+import kotlin.math.*
 
 @Composable
 fun InteractiveStreetView(
     imageUrl: String,
     modifier: Modifier = Modifier,
-    onPan: (Float) -> Unit
+    onPan: (Float) -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
 
-    // Street View Navigation State
+    // Performance-optimierte State Management
     var currentHeading by remember { mutableIntStateOf(0) }
-    var currentPitch by remember { mutableIntStateOf(0) } // Für Hoch/Runter schauen
-    var currentZoom by remember { mutableFloatStateOf(90f) } // FOV (Field of View)
+    var currentPitch by remember { mutableIntStateOf(0) }
+    var currentZoom by remember { mutableFloatStateOf(90f) }
     var currentLocation by remember { mutableStateOf(extractLocationFromUrl(imageUrl)) }
 
-    // Gesture State
+    // Debouncing für Performance
+    var lastUpdateTime by remember { mutableLongStateOf(0L) }
+    var pendingUpdate by remember { mutableStateOf(false) }
+
+    // Gesture State mit Optimierung
     var dragAccumulator by remember { mutableStateOf(Offset.Zero) }
     var isLoading by remember { mutableStateOf(false) }
-    var transformationState by remember { mutableStateOf(TransformState()) }
+    var lastImageUrl by remember { mutableStateOf("") }
 
-    // Berechne die Street View URL mit allen Parametern
+    // Debounced URL Update für bessere Performance
     val streetViewUrl = remember(imageUrl, currentHeading, currentPitch, currentZoom, currentLocation) {
-        buildStreetViewUrl(
-            baseUrl = imageUrl,
-            location = currentLocation,
-            heading = currentHeading,
-            pitch = currentPitch,
-            fov = currentZoom.toInt()
-        )
+        val currentTime = System.currentTimeMillis()
+        if (currentTime - lastUpdateTime > 100) { // 100ms Debounce
+            lastUpdateTime = currentTime
+            buildOptimizedStreetViewUrl(
+                baseUrl = imageUrl,
+                location = currentLocation,
+                heading = currentHeading,
+                pitch = currentPitch,
+                fov = currentZoom.toInt()
+            ).also { lastImageUrl = it }
+        } else {
+            lastImageUrl
+        }
     }
 
+    // Performance-optimierte Image Loading
     val painter = rememberAsyncImagePainter(
         model = ImageRequest.Builder(context)
             .data(streetViewUrl)
-            .crossfade(true)
-            .size(coil.size.Size.ORIGINAL)
+            .size(Size.ORIGINAL)
+            .crossfade(200) // Reduzierte Crossfade Zeit
+            .memoryCachePolicy(coil.request.CachePolicy.ENABLED)
+            .diskCachePolicy(coil.request.CachePolicy.ENABLED)
             .build()
     )
 
     Box(modifier = modifier.fillMaxSize()) {
         when (painter.state) {
             is AsyncImagePainter.State.Loading -> {
-                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                LoadingIndicator()
             }
             is AsyncImagePainter.State.Success -> {
-                val imageBitmap = (painter.state as AsyncImagePainter.State.Success).result.drawable.let {
-                    (it as android.graphics.drawable.BitmapDrawable).bitmap
-                }.asImageBitmap()
+                PerformantStreetViewCanvas(
+                    painter = painter,
+                    currentZoom = currentZoom,
+                    onZoomChange = { newZoom ->
+                        currentZoom = newZoom.coerceIn(20f, 120f)
+                    },
+                    onDragAccumulator = { offset ->
+                        dragAccumulator += offset
+                    },
+                    onDragEnd = {
+                        scope.launch {
+                            if (!pendingUpdate) {
+                                pendingUpdate = true
+                                delay(50) // Debounce drag updates
 
-                Canvas(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .pointerInput(Unit) {
-                            // Multi-Touch Gesture Detection
-                            detectTransformGestures(
-                                onGesture = { _, pan, zoom, _ ->
-                                    // Zoom (Pinch) Gesture
-                                    if (zoom != 1f) {
-                                        currentZoom = (currentZoom / zoom).coerceIn(20f, 120f)
+                                handleOptimizedDragEnd(
+                                    dragAccumulator = dragAccumulator,
+                                    sensitivity = with(density) { 2.dp.toPx() },
+                                    onHeadingChange = { newHeading ->
+                                        currentHeading = normalizeHeading(newHeading)
+                                        onPan(newHeading.toFloat())
+                                    },
+                                    onPitchChange = { newPitch ->
+                                        currentPitch = newPitch.coerceIn(-90, 90)
                                     }
-
-                                    // Pan Gesture für Look-Around
-                                    if (pan != Offset.Zero) {
-                                        dragAccumulator += pan
-                                    }
-                                }
-                            )
-                        }
-                        .pointerInput(Unit) {
-                            // Tap Gesture für Movement
-                            detectTapGestures(
-                                onTap = { offset ->
-                                    scope.launch {
-                                        moveForward(
-                                            currentLocation = currentLocation,
-                                            heading = currentHeading,
-                                            stepSize = 10.0 // Meter
-                                        ) { newLocation ->
-                                            currentLocation = newLocation
-                                            isLoading = true
-                                            // Reset nach Bewegung
-                                            scope.launch {
-                                                kotlinx.coroutines.delay(1000)
-                                                isLoading = false
-                                            }
-                                        }
-                                    }
-                                }
-                            )
-                        }
-                        .pointerInput(Unit) {
-                            // Separate Drag Detection für Präzise Kontrolle
-                            detectDragGestures(
-                                onDragEnd = {
-                                    handleDragEnd(
-                                        dragAccumulator = dragAccumulator,
-                                        onHeadingChange = { newHeading ->
-                                            currentHeading = newHeading
-                                            onPan(newHeading.toFloat())
-                                        },
-                                        onPitchChange = { newPitch ->
-                                            currentPitch = newPitch
-                                        }
-                                    )
-                                    dragAccumulator = Offset.Zero
-                                }
-                            ) { change, dragAmount ->
-                                change.consume()
-                                dragAccumulator += dragAmount
+                                )
+                                dragAccumulator = Offset.Zero
+                                pendingUpdate = false
                             }
                         }
-                ) {
-                    val canvasWidth = size.width
-                    val canvasHeight = size.height
-                    val imageWidth = imageBitmap.width
-                    val imageHeight = imageBitmap.height
-
-                    // Angepasste Skalierung für Zoom
-                    val baseScale = maxOf(
-                        canvasWidth / imageWidth.toFloat(),
-                        canvasHeight / imageHeight.toFloat()
-                    )
-
-                    // Zoom-Effekt durch FOV-Simulation
-                    val zoomFactor = 90f / currentZoom // Inverse FOV für Zoom
-                    val finalScale = baseScale * zoomFactor
-
-                    val scaledWidth = imageWidth * finalScale
-                    val scaledHeight = imageHeight * finalScale
-
-                    // Zentriere das Bild mit Zoom-Offset
-                    val offsetX = (canvasWidth - scaledWidth) / 2
-                    val offsetY = (canvasHeight - scaledHeight) / 2
-
-                    // Zeichne mit Transform
-                    scale(zoomFactor) {
-                        translate(offsetX / zoomFactor, offsetY / zoomFactor) {
-                            drawImage(
-                                image = imageBitmap,
-                                dstSize = IntSize(
-                                    (imageWidth * baseScale).toInt(),
-                                    (imageHeight * baseScale).toInt()
-                                )
-                            )
+                    },
+                    onTap = { offset ->
+                        // Optional: Movement Funktionalität
+                        scope.launch {
+                            if (!isLoading) {
+                                isLoading = true
+                                try {
+                                    moveForwardOptimized(
+                                        currentLocation = currentLocation,
+                                        heading = currentHeading,
+                                        stepSize = 15.0
+                                    ) { newLocation ->
+                                        currentLocation = newLocation
+                                    }
+                                } finally {
+                                    delay(500)
+                                    isLoading = false
+                                }
+                            }
                         }
                     }
-                }
+                )
 
-                // Loading Overlay während Navigation
+                // Loading Overlay
                 if (isLoading) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .align(Alignment.Center),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator()
-                    }
+                    LoadingOverlay()
                 }
 
                 // Navigation HUD
-                StreetViewNavigationHUD(
-                    currentHeading = currentHeading,
-                    currentPitch = currentPitch,
-                    currentZoom = currentZoom,
+                StreetViewHUD(
+                    heading = currentHeading,
+                    pitch = currentPitch,
+                    zoom = currentZoom,
                     modifier = Modifier.align(Alignment.TopStart)
                 )
             }
             is AsyncImagePainter.State.Error -> {
-                // Fallback für normale Bilder ohne Street View
-                NormalImageView(
+                // Fallback für normale Bilder
+                FallbackImageView(
                     imageUrl = imageUrl,
                     onPan = onPan,
                     modifier = Modifier.fillMaxSize()
                 )
             }
-            else -> {}
+            else -> Unit
         }
     }
 }
 
-// Data Classes für Navigation
-data class StreetViewLocation(
-    val latitude: Double,
-    val longitude: Double
-)
+@Composable
+private fun PerformantStreetViewCanvas(
+    painter: AsyncImagePainter,
+    currentZoom: Float,
+    onZoomChange: (Float) -> Unit,
+    onDragAccumulator: (Offset) -> Unit,
+    onDragEnd: () -> Unit,
+    onTap: (Offset) -> Unit
+) {
+    val imageBitmap = remember(painter) {
+        (painter.state as AsyncImagePainter.State.Success).result.drawable.let {
+            (it as android.graphics.drawable.BitmapDrawable).bitmap
+        }.asImageBitmap()
+    }
 
-data class TransformState(
-    val scale: Float = 1f,
-    val offsetX: Float = 0f,
-    val offsetY: Float = 0f
-)
+    Canvas(
+        modifier = Modifier
+            .fillMaxSize()
+            .pointerInput("zoom") {
+                detectTransformGestures(
+                    onGesture = { _, pan, zoom, _ ->
+                        if (zoom != 1f) {
+                            onZoomChange(currentZoom / zoom)
+                        }
+                        if (pan != Offset.Zero) {
+                            onDragAccumulator(pan)
+                        }
+                    }
+                )
+            }
+            .pointerInput("drag") {
+                detectDragGestures(
+                    onDragEnd = { onDragEnd() }
+                ) { change, dragAmount ->
+                    change.consume()
+                    onDragAccumulator(dragAmount)
+                }
+            }
+            .pointerInput("tap") {
+                detectTapGestures(onTap = onTap)
+            }
+    ) {
+        val canvasWidth = size.width
+        val canvasHeight = size.height
+        val imageWidth = imageBitmap.width.toFloat()
+        val imageHeight = imageBitmap.height.toFloat()
 
-// Street View URL Builder mit erweiterten Parametern
-private fun buildStreetViewUrl(
-    baseUrl: String,
-    location: StreetViewLocation,
-    heading: Int,
-    pitch: Int,
-    fov: Int
-): String {
-    return if (baseUrl.contains("maps.googleapis.com/maps/api/streetview")) {
-        // Extrahiere API Key
-        val apiKeyMatch = Regex("key=([^&]+)").find(baseUrl)
-        val apiKey = apiKeyMatch?.groupValues?.get(1) ?: ""
+        // Optimierte Skalierung
+        val baseScale = maxOf(
+            canvasWidth / imageWidth,
+            canvasHeight / imageHeight
+        )
 
-        "https://maps.googleapis.com/maps/api/streetview?" +
-                "size=800x600" +
-                "&location=${location.latitude},${location.longitude}" +
-                "&heading=$heading" +
-                "&pitch=$pitch" +
-                "&fov=$fov" +
-                "&key=$apiKey"
-    } else {
-        baseUrl // Fallback für normale Bilder
+        val zoomFactor = 90f / currentZoom
+        val finalScale = baseScale * zoomFactor
+
+        val offsetX = (canvasWidth - imageWidth * finalScale) / 2
+        val offsetY = (canvasHeight - imageHeight * finalScale) / 2
+
+        // Hardware-beschleunigte Transformation
+        scale(zoomFactor) {
+            translate(offsetX / zoomFactor, offsetY / zoomFactor) {
+                drawImage(
+                    image = imageBitmap,
+                    dstSize = IntSize(
+                        (imageWidth * baseScale).toInt(),
+                        (imageHeight * baseScale).toInt()
+                    )
+                )
+            }
+        }
     }
 }
 
-// Extrahiert Location aus einer Street View URL
-private fun extractLocationFromUrl(url: String): StreetViewLocation {
-    val locationMatch = Regex("location=([^&]+)").find(url)
-    return if (locationMatch != null) {
-        val coords = locationMatch.groupValues[1].split(",")
-        if (coords.size >= 2) {
+@Composable
+private fun LoadingIndicator() {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        CircularProgressIndicator(
+            modifier = Modifier.size(48.dp),
+            strokeWidth = 4.dp
+        )
+    }
+}
+
+@Composable
+private fun LoadingOverlay() {
+    Box(
+        modifier = Modifier
+            .fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)
+            )
+        ) {
+            Row(
+                modifier = Modifier.padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                Spacer(modifier = Modifier.width(12.dp))
+                Text("Lade neue Ansicht...")
+            }
+        }
+    }
+}
+
+@Composable
+private fun StreetViewHUD(
+    heading: Int,
+    pitch: Int,
+    zoom: Float,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.padding(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f)
+        )
+    ) {
+        Column(modifier = Modifier.padding(8.dp)) {
+            Text(
+                text = "Richtung: ${heading}°",
+                style = MaterialTheme.typography.bodySmall
+            )
+            Text(
+                text = "Neigung: ${pitch}°",
+                style = MaterialTheme.typography.bodySmall
+            )
+            Text(
+                text = "Zoom: ${(90f / zoom * 100).toInt()}%",
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+    }
+}
+
+@Composable
+private fun FallbackImageView(
+    imageUrl: String,
+    onPan: (Float) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    // Einfache Fallback-Implementierung für normale Bilder
+    Box(modifier = modifier) {
+        Text(
+            text = "Normale Bildansicht",
+            modifier = Modifier.align(Alignment.Center)
+        )
+    }
+}
+
+// Utility Functions
+private fun extractLocationFromUrl(imageUrl: String): StreetViewLocation {
+    val locationRegex = Regex("location=([^&]+)")
+    val match = locationRegex.find(imageUrl)
+
+    return if (match != null) {
+        val coords = match.groupValues[1].split(",")
+        if (coords.size == 2) {
             StreetViewLocation(
                 latitude = coords[0].toDoubleOrNull() ?: 48.8566,
                 longitude = coords[1].toDoubleOrNull() ?: 2.3522
@@ -268,174 +340,70 @@ private fun extractLocationFromUrl(url: String): StreetViewLocation {
     }
 }
 
-// Bewegung in Street View simulieren
-private suspend fun moveForward(
+private fun buildOptimizedStreetViewUrl(
+    baseUrl: String,
+    location: StreetViewLocation,
+    heading: Int,
+    pitch: Int,
+    fov: Int
+): String {
+    return if (baseUrl.contains("maps.googleapis.com")) {
+        val apiKeyMatch = Regex("key=([^&]+)").find(baseUrl)
+        val apiKey = apiKeyMatch?.groupValues?.get(1) ?: ""
+
+        "https://maps.googleapis.com/maps/api/streetview?" +
+                "size=1024x1024" + // Höhere Auflösung für bessere Qualität
+                "&location=${location.latitude},${location.longitude}" +
+                "&heading=$heading" +
+                "&pitch=$pitch" +
+                "&fov=$fov" +
+                "&key=$apiKey"
+    } else {
+        baseUrl
+    }
+}
+
+private fun normalizeHeading(heading: Int): Int {
+    return ((heading % 360) + 360) % 360
+}
+
+private fun handleOptimizedDragEnd(
+    dragAccumulator: Offset,
+    sensitivity: Float,
+    onHeadingChange: (Int) -> Unit,
+    onPitchChange: (Int) -> Unit
+) {
+    val dragThreshold = sensitivity * 2
+
+    if (abs(dragAccumulator.x) > dragThreshold || abs(dragAccumulator.y) > dragThreshold) {
+        val headingDelta = (dragAccumulator.x / sensitivity * 2).toInt()
+        val pitchDelta = (-dragAccumulator.y / sensitivity * 2).toInt()
+
+        onHeadingChange(headingDelta)
+        onPitchChange(pitchDelta)
+    }
+}
+
+private suspend fun moveForwardOptimized(
     currentLocation: StreetViewLocation,
     heading: Int,
-    stepSize: Double, // in Metern
-    onLocationChanged: (StreetViewLocation) -> Unit
+    stepSize: Double,
+    onLocationUpdate: (StreetViewLocation) -> Unit
 ) {
-    // Konvertiere Heading zu Radiant
     val headingRad = Math.toRadians(heading.toDouble())
-
-    // Berechne neue Position (vereinfachte Bewegung)
-    val earthRadius = 6371000.0 // Meter
-    val deltaLat = stepSize * cos(headingRad) / earthRadius * (180.0 / Math.PI)
-    val deltaLng = stepSize * sin(headingRad) / (earthRadius * cos(Math.toRadians(currentLocation.latitude))) * (180.0 / Math.PI)
+    val deltaLat = cos(headingRad) * stepSize / 111000.0 // ~111km per degree
+    val deltaLng = sin(headingRad) * stepSize / (111000.0 * cos(Math.toRadians(currentLocation.latitude)))
 
     val newLocation = StreetViewLocation(
         latitude = currentLocation.latitude + deltaLat,
         longitude = currentLocation.longitude + deltaLng
     )
 
-    onLocationChanged(newLocation)
+    onLocationUpdate(newLocation)
 }
 
-// Behandle Drag-Gesten für Look-Around
-private fun handleDragEnd(
-    dragAccumulator: Offset,
-    onHeadingChange: (Int) -> Unit,
-    onPitchChange: (Int) -> Unit
-) {
-    val sensitivity = 0.5f
-
-    // Horizontaler Drag = Heading ändern (links/rechts schauen)
-    val headingChange = (dragAccumulator.x * sensitivity).toInt()
-    if (kotlin.math.abs(headingChange) >= 5) {
-        val newHeading = (360 - headingChange + 360) % 360
-        onHeadingChange(newHeading)
-    }
-
-    // Vertikaler Drag = Pitch ändern (hoch/runter schauen)
-    val pitchChange = (dragAccumulator.y * sensitivity * -1).toInt() // Invertiert
-    if (kotlin.math.abs(pitchChange) >= 5) {
-        val newPitch = (pitchChange).coerceIn(-90, 90)
-        onPitchChange(newPitch)
-    }
-}
-
-// Navigation HUD Component
-@Composable
-private fun StreetViewNavigationHUD(
-    currentHeading: Int,
-    currentPitch: Int,
-    currentZoom: Float,
-    modifier: Modifier = Modifier
-) {
-    // Debug/Info Overlay (kann später entfernt werden)
-    Card(
-        modifier = modifier.padding(8.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f)
-        )
-    ) {
-        Column(
-            modifier = Modifier.padding(8.dp)
-        ) {
-            Text(
-                text = "Richtung: ${currentHeading}°",
-                style = MaterialTheme.typography.bodySmall
-            )
-            Text(
-                text = "Neigung: ${currentPitch}°",
-                style = MaterialTheme.typography.bodySmall
-            )
-            Text(
-                text = "Zoom: ${currentZoom.toInt()}°",
-                style = MaterialTheme.typography.bodySmall
-            )
-            Text(
-                text = "💡 Tippen = Vorwärts",
-                style = MaterialTheme.typography.bodySmall
-            )
-            Text(
-                text = "👆 Ziehen = Umschauen",
-                style = MaterialTheme.typography.bodySmall
-            )
-            Text(
-                text = "🤏 Kneifen = Zoom",
-                style = MaterialTheme.typography.bodySmall
-            )
-        }
-    }
-}
-
-@Composable
-private fun NormalImageView(
-    imageUrl: String,
-    onPan: (Float) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val painter = rememberAsyncImagePainter(
-        model = ImageRequest.Builder(LocalContext.current)
-            .data(imageUrl)
-            .crossfade(true)
-            .build()
-    )
-
-    var offsetX by remember { mutableFloatStateOf(0f) }
-
-    when (painter.state) {
-        is AsyncImagePainter.State.Success -> {
-            val imageBitmap = (painter.state as AsyncImagePainter.State.Success).result.drawable.let {
-                (it as android.graphics.drawable.BitmapDrawable).bitmap
-            }.asImageBitmap()
-
-            Canvas(
-                modifier = modifier
-                    .pointerInput(Unit) {
-                        detectDragGestures { change, dragAmount ->
-                            change.consume()
-                            offsetX += dragAmount.x
-                            onPan(dragAmount.x)
-                        }
-                    }
-            ) {
-                val canvasWidth = size.width
-                val canvasHeight = size.height
-                val imageWidth = imageBitmap.width
-                val imageHeight = imageBitmap.height
-
-                val scale = canvasHeight / imageHeight.toFloat()
-                val scaledWidth = imageWidth * scale
-                val wrappedOffsetX = offsetX.mod(scaledWidth)
-
-                drawImage(
-                    image = imageBitmap,
-                    dstOffset = IntOffset(wrappedOffsetX.toInt(), 0),
-                    dstSize = IntSize(scaledWidth.toInt(), canvasHeight.toInt())
-                )
-
-                if (wrappedOffsetX > 0) {
-                    drawImage(
-                        image = imageBitmap,
-                        dstOffset = IntOffset((wrappedOffsetX - scaledWidth).toInt(), 0),
-                        dstSize = IntSize(scaledWidth.toInt(), canvasHeight.toInt())
-                    )
-                } else {
-                    drawImage(
-                        image = imageBitmap,
-                        dstOffset = IntOffset((wrappedOffsetX + scaledWidth).toInt(), 0),
-                        dstSize = IntSize(scaledWidth.toInt(), canvasHeight.toInt())
-                    )
-                }
-            }
-        }
-        is AsyncImagePainter.State.Loading -> {
-            Box(
-                modifier = modifier,
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator()
-            }
-        }
-        else -> {
-            // Error handling
-        }
-    }
-}
-
-// Helfer für Modulo-Operation bei Floats
-fun Float.mod(other: Float): Float {
-    return ((this % other) + other) % other
-}
+// Data Classes
+data class StreetViewLocation(
+    val latitude: Double,
+    val longitude: Double
+)
