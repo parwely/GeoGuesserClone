@@ -103,19 +103,15 @@ class LocationRepository @Inject constructor(
         return try {
             println("LocationRepository: Optimierter Backend-Aufruf mit Retry-Mechanismus...")
 
-            // KORREKTUR: Verwende excludeIds Parameter um immer neue Locations zu bekommen
-            val excludeIds = locationCache.map { coordHash ->
-                // Extrahiere Location-IDs aus dem Cache falls verfügbar
-                // Für jetzt verwenden wir eine leere Liste
-                emptyList<Int>()
-            }.flatten()
-
+            // KORREKTUR: Verwende ALLE verfügbaren Parameter-Kombinationen
             val response = ApiRetryHandler.executeLocationRetry(
                 categories = listOf("urban", "landmark", "rural", "desert", "mountain", "coastal", "forest"),
-                difficulties = listOf(1, 2, 3)
+                difficulties = listOf(1, 2, 3) // ALLE Difficulties versuchen
             ) { category, difficulty ->
-                // KORREKTUR: Verwende unterschiedliche Parameter bei jedem Call
-                val randomCount = (3..7).random() // Randomisiere count
+                // KORREKTUR: Versuche mit verschiedenen counts und ohne Filter
+                val randomCount = (5..10).random()
+                println("LocationRepository: Backend-Versuch mit category=$category, difficulty=$difficulty, count=$randomCount")
+
                 apiService.getRandomLocations(
                     count = randomCount,
                     difficulty = difficulty,
@@ -125,14 +121,14 @@ class LocationRepository @Inject constructor(
 
             if (response?.isSuccessful == true && response.body() != null) {
                 val locationsResponse = response.body()!!
-                if (locationsResponse.success && locationsResponse.data.locations.isNotEmpty()) {
+                println("LocationRepository: Backend Response: success=${locationsResponse.success}, count=${locationsResponse.data.count}")
 
-                    // KORREKTUR: Versuche ALLE Locations aus der Response, nicht nur die erste
+                if (locationsResponse.success && locationsResponse.data.locations.isNotEmpty()) {
+                    // Versuche ALLE Locations aus der Response, nicht nur die erste
                     for (backendLocation in locationsResponse.data.locations) {
                         val coordHash = "${backendLocation.coordinates.latitude}-${backendLocation.coordinates.longitude}"
 
                         if (coordHash !in locationCache) {
-                            // Neue, einzigartige Location gefunden!
                             addToCache(LocationEntity(
                                 id = "temp_${backendLocation.id}",
                                 latitude = backendLocation.coordinates.latitude,
@@ -146,15 +142,35 @@ class LocationRepository @Inject constructor(
                         }
                     }
 
-                    // Alle Locations sind Duplikate - force nehme eine mit Modifier
+                    // Alle Locations sind Duplikate - force nehme eine
                     val backendLocation = locationsResponse.data.locations.first()
                     println("LocationRepository: ⚠️ Alle Locations sind Duplikate, verwende trotzdem: ${backendLocation.city}")
                     return createLocationEntity(backendLocation, "backend_forced_${System.currentTimeMillis()}")
+                } else {
+                    println("LocationRepository: ❌ Backend hat keine Locations für diese Parameter")
                 }
+            } else {
+                println("LocationRepository: ❌ Backend Response nicht erfolgreich: ${response?.code()}")
             }
 
-            Result.failure(Exception("Backend-Aufruf mit Retry fehlgeschlagen"))
+            // FALLBACK: Versuche mit weniger restriktiven Parametern
+            println("LocationRepository: Versuche Fallback ohne Filter...")
+            val fallbackResponse = try {
+                apiService.getRandomLocations(count = 10) // Ohne difficulty und category Filter
+            } catch (e: Exception) {
+                println("LocationRepository: Fallback-Aufruf fehlgeschlagen: ${e.message}")
+                null
+            }
+
+            if (fallbackResponse?.isSuccessful == true && fallbackResponse.body()?.data?.locations?.isNotEmpty() == true) {
+                val location = fallbackResponse.body()!!.data.locations.first()
+                println("LocationRepository: ✅ Fallback-Location gefunden: ${location.city}")
+                return createLocationEntity(location, "backend_fallback_${System.currentTimeMillis()}")
+            }
+
+            Result.failure(Exception("Backend hat keine Locations verfügbar"))
         } catch (e: Exception) {
+            println("LocationRepository: ❌ Backend-Fehler: ${e.message}")
             Result.failure(e)
         }
     }
@@ -280,31 +296,39 @@ class LocationRepository @Inject constructor(
 
     private suspend fun searchMapillaryInCity(lat: Double, lng: Double, cityName: String): LocationEntity? {
         return try {
-            val latOffset = 0.05 // Kleinerer Radius für mehr Präzision
+            val latOffset = 0.05
             val lngOffset = 0.05
             val bbox = "${lng - lngOffset},${lat - latOffset},${lng + lngOffset},${lat + latOffset}"
+
+            println("LocationRepository: Mapillary-Suche für $cityName mit bbox=$bbox")
 
             val response = withTimeout(3000L) {
                 mapillaryApiService.getImagesNearby(
                     bbox = bbox,
                     isPano = true,
-                    limit = 3, // Reduzierte Anzahl für bessere Performance
+                    limit = 3,
                     accessToken = Constants.MAPILLARY_ACCESS_TOKEN
                 )
             }
 
             if (response.isSuccessful && response.body() != null) {
                 val mapillaryResponse = response.body()!!
+                println("LocationRepository: Mapillary Response für $cityName: ${mapillaryResponse.data.size} Bilder gefunden")
+
                 if (mapillaryResponse.data.isNotEmpty()) {
                     val mapillaryImage = mapillaryResponse.data.random()
                     val coords = mapillaryImage.geometry.coordinates
+
+                    println("LocationRepository: Mapillary Image ID=${mapillaryImage.id}, coords=[${coords[0]}, ${coords[1]}]")
 
                     val imageUrl = mapillaryImage.thumb_1024_url
                         ?: mapillaryImage.thumb_256_url
                         ?: ""
 
+                    println("LocationRepository: Mapillary Image URL: ${imageUrl.take(100)}...")
+
                     if (imageUrl.isNotEmpty()) {
-                        LocationEntity(
+                        val locationEntity = LocationEntity(
                             id = "mapillary_${mapillaryImage.id}_${System.currentTimeMillis()}",
                             latitude = coords[1], // Mapillary: [lng, lat]
                             longitude = coords[0],
@@ -315,10 +339,22 @@ class LocationRepository @Inject constructor(
                             isCached = true,
                             isUsed = false
                         )
-                    } else null
-                } else null
-            } else null
+
+                        println("LocationRepository: ✅ Mapillary Location erstellt: $cityName (${coords[1]}, ${coords[0]})")
+                        return locationEntity
+                    } else {
+                        println("LocationRepository: ❌ Mapillary Image hat keine URL für $cityName")
+                    }
+                } else {
+                    println("LocationRepository: ❌ Mapillary: Keine Bilder für $cityName gefunden")
+                }
+            } else {
+                println("LocationRepository: ❌ Mapillary API Fehler für $cityName: ${response.code()}")
+            }
+
+            null
         } catch (e: Exception) {
+            println("LocationRepository: ❌ Mapillary Exception für $cityName: ${e.message}")
             null
         }
     }

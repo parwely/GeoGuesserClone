@@ -15,8 +15,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import coil.compose.AsyncImagePainter
+import coil.compose.rememberAsyncImagePainter
 import coil.request.ImageRequest
 import com.example.geogeusserclone.data.database.entities.LocationEntity
 import com.example.geogeusserclone.utils.MemoryManager
@@ -26,29 +29,36 @@ fun LocationImageScreen(
     location: LocationEntity,
     timeRemaining: Long,
     onShowMap: () -> Unit,
-    onPan: (Float) -> Unit // Hinzugefügt für die Interaktion
+    onPan: (Float) -> Unit = {}
 ) {
     val context = LocalContext.current
-    var rotation by remember { mutableFloatStateOf(0f) }
 
     // Automatisches Memory Management
     MemoryManager.AutoMemoryManagement(context)
 
+    // Tracking der aktuellen Position für erweiterte Navigation
+    var currentLatitude by remember { mutableDoubleStateOf(location.latitude) }
+    var currentLongitude by remember { mutableDoubleStateOf(location.longitude) }
+
     Box(
         modifier = Modifier.fillMaxSize()
     ) {
-        // Ersetze statisches Bild durch interaktive Street-View-Komponente
+        // Vollwertige Interactive Street View mit Navigation
         if (location.imageUrl.isNotBlank()) {
+            println("LocationImageScreen: Zeige Interactive Street View an: ${location.imageUrl}")
+
             InteractiveStreetView(
                 imageUrl = location.imageUrl,
                 modifier = Modifier.fillMaxSize(),
-                onPan = { delta ->
-                    rotation += delta
-                    onPan(delta)
+                onPan = onPan,
+                onLocationChange = { lat, lng ->
+                    currentLatitude = lat
+                    currentLongitude = lng
+                    println("LocationImageScreen: Neue Position: $lat, $lng")
                 }
             )
         } else {
-            // Behalte den Lade-Indikator für leere URLs
+            // Fallback für leere URLs
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -58,17 +68,29 @@ fun LocationImageScreen(
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    CircularProgressIndicator()
+                    Icon(
+                        Icons.Default.Place,
+                        contentDescription = null,
+                        modifier = Modifier.size(64.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        text = "Lade Location...",
-                        style = MaterialTheme.typography.bodyLarge
+                        text = "Keine Street View verfügbar",
+                        style = MaterialTheme.typography.titleMedium,
+                        textAlign = TextAlign.Center
+                    )
+                    Text(
+                        text = "Location: ${location.city ?: "Unbekannt"}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
         }
 
-        // Gradient Overlay für bessere Lesbarkeit
+        // Gradient Overlay für bessere UI-Lesbarkeit (nur minimal)
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -76,7 +98,7 @@ fun LocationImageScreen(
                     Brush.verticalGradient(
                         colors = listOf(
                             Color.Transparent,
-                            Color.Black.copy(alpha = 0.3f)
+                            Color.Black.copy(alpha = 0.1f)
                         ),
                         startY = 0f,
                         endY = Float.POSITIVE_INFINITY
@@ -102,48 +124,51 @@ fun LocationImageScreen(
             )
         }
 
-        // Location Info (nur wenn verfügbar)
-        if (!location.city.isNullOrBlank() || !location.country.isNullOrBlank()) {
-            Card(
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(16.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.9f)
-                )
+        // Current Position Info (für Debug und erweiterte Navigation)
+        Card(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.9f)
+            )
+        ) {
+            Column(
+                modifier = Modifier.padding(12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Column(
-                    modifier = Modifier.padding(12.dp)
-                ) {
-                    location.city?.let { city ->
-                        Text(
-                            text = "Hinweis: $city",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                    location.country?.let { country ->
-                        Text(
-                            text = country,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                Text(
+                    text = location.city ?: "Unbekannter Ort",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium
+                )
+                location.country?.let { country ->
+                    Text(
+                        text = country,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
+                // Zeige aktuelle Koordinaten (hilfreich für Navigation)
+                Text(
+                    text = "Pos: ${String.format("%.4f", currentLatitude)}, ${String.format("%.4f", currentLongitude)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.outline
+                )
             }
         }
 
         // Difficulty Indicator
         Card(
             modifier = Modifier
-                .align(Alignment.TopCenter)
+                .align(Alignment.BottomStart)
                 .padding(16.dp),
             colors = CardDefaults.cardColors(
                 containerColor = getDifficultyColor(location.difficulty).copy(alpha = 0.9f)
             )
         ) {
             Text(
-                text = "Schwierigkeit: ${getDifficultyText(location.difficulty)}",
+                text = getDifficultyText(location.difficulty),
                 modifier = Modifier.padding(8.dp, 4.dp),
                 style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.Bold,
@@ -151,42 +176,71 @@ fun LocationImageScreen(
             )
         }
 
-        // Bottom Action Button
-        FloatingActionButton(
+        // Guess Button - größer und prominent
+        Button(
             onClick = onShowMap,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(24.dp),
-            containerColor = MaterialTheme.colorScheme.primary
+                .padding(16.dp)
+                .size(width = 140.dp, height = 56.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary
+            ),
+            shape = RoundedCornerShape(28.dp)
         ) {
             Icon(
                 Icons.Default.Place,
-                contentDescription = "Karte öffnen",
-                tint = Color.White
+                contentDescription = null,
+                modifier = Modifier.size(24.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "RATEN",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
             )
         }
 
-        // Instruction Text für neue Spieler
+        // Navigation Hint (einblendbar)
         Card(
             modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(24.dp),
+                .align(Alignment.CenterStart)
+                .padding(16.dp),
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)
+                containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.9f)
             )
         ) {
-            Text(
-                text = "🗺️ Tippe auf die Karte, um deinen Tipp abzugeben",
-                modifier = Modifier.padding(12.dp),
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium
-            )
+            Column(
+                modifier = Modifier.padding(12.dp)
+            ) {
+                Text(
+                    text = "🎮 Navigation",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "• Ziehen zum Umschauen",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Text(
+                    text = "• Doppeltipp zum Bewegen",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Text(
+                    text = "• Pinch zum Zoomen",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Text(
+                    text = "• Einfachtipp für Controls",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
         }
     }
 }
 
-private fun formatTime(timeMs: Long): String {
-    val totalSeconds = timeMs / 1000
+private fun formatTime(milliseconds: Long): String {
+    val totalSeconds = milliseconds / 1000
     val minutes = totalSeconds / 60
     val seconds = totalSeconds % 60
     return String.format("%d:%02d", minutes, seconds)
@@ -194,22 +248,22 @@ private fun formatTime(timeMs: Long): String {
 
 private fun getDifficultyColor(difficulty: Int): Color {
     return when (difficulty) {
-        1 -> Color(0xFF4CAF50) // Grün - Einfach
-        2 -> Color(0xFFFFC107) // Gelb - Mittel
-        3 -> Color(0xFFFF9800) // Orange - Schwer
-        4 -> Color(0xFFFF5722) // Rot-Orange - Sehr schwer
-        5 -> Color(0xFFF44336) // Rot - Extrem
-        else -> Color(0xFF9E9E9E) // Grau - Unbekannt
+        1 -> Color(0xFF4CAF50) // Grün
+        2 -> Color(0xFF8BC34A) // Hellgrün
+        3 -> Color(0xFFFFEB3B) // Gelb
+        4 -> Color(0xFFFF9800) // Orange
+        5 -> Color(0xFFFF5722) // Rot
+        else -> Color(0xFF9E9E9E) // Grau
     }
 }
 
 private fun getDifficultyText(difficulty: Int): String {
     return when (difficulty) {
-        1 -> "Einfach"
-        2 -> "Mittel"
-        3 -> "Schwer"
-        4 -> "Sehr schwer"
-        5 -> "Extrem"
+        1 -> "Sehr Einfach"
+        2 -> "Einfach"
+        3 -> "Mittel"
+        4 -> "Schwer"
+        5 -> "Sehr Schwer"
         else -> "Unbekannt"
     }
 }

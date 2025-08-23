@@ -1,23 +1,35 @@
 package com.example.geogeusserclone.ui.components
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
 import coil.compose.AsyncImagePainter
 import coil.compose.rememberAsyncImagePainter
 import coil.request.ImageRequest
@@ -30,151 +42,239 @@ import kotlin.math.*
 fun InteractiveStreetView(
     imageUrl: String,
     modifier: Modifier = Modifier,
-    onPan: (Float) -> Unit = {}
+    onPan: (Float) -> Unit = {},
+    onLocationChange: ((Double, Double) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
 
-    // Performance-optimierte State Management
+    // Street View State Management
     var currentHeading by remember { mutableIntStateOf(0) }
     var currentPitch by remember { mutableIntStateOf(0) }
     var currentZoom by remember { mutableFloatStateOf(90f) }
     var currentLocation by remember { mutableStateOf(extractLocationFromUrl(imageUrl)) }
-
-    // Debouncing für Performance
-    var lastUpdateTime by remember { mutableLongStateOf(0L) }
-    var pendingUpdate by remember { mutableStateOf(false) }
-
-    // Gesture State mit Optimierung
-    var dragAccumulator by remember { mutableStateOf(Offset.Zero) }
+    var showControls by remember { mutableStateOf(true) }
     var isLoading by remember { mutableStateOf(false) }
-    var lastImageUrl by remember { mutableStateOf("") }
 
-    // Debounced URL Update für bessere Performance
-    val streetViewUrl = remember(imageUrl, currentHeading, currentPitch, currentZoom, currentLocation) {
-        val currentTime = System.currentTimeMillis()
-        if (currentTime - lastUpdateTime > 100) { // 100ms Debounce
-            lastUpdateTime = currentTime
-            buildOptimizedStreetViewUrl(
-                baseUrl = imageUrl,
-                location = currentLocation,
-                heading = currentHeading,
-                pitch = currentPitch,
-                fov = currentZoom.toInt()
-            ).also { lastImageUrl = it }
-        } else {
-            lastImageUrl
+    // Gesture State
+    var dragAccumulator by remember { mutableStateOf(Offset.Zero) }
+    var lastUpdateTime by remember { mutableLongStateOf(0L) }
+
+    // Auto-hide controls after inactivity
+    LaunchedEffect(showControls) {
+        if (showControls) {
+            delay(3000) // Hide after 3 seconds
+            showControls = false
         }
     }
 
-    // Performance-optimierte Image Loading
+    // Debounced Street View URL
+    val streetViewUrl = remember(currentHeading, currentPitch, currentZoom, currentLocation) {
+        val currentTime = System.currentTimeMillis()
+        if (currentTime - lastUpdateTime > 100) { // 100ms debounce
+            lastUpdateTime = currentTime
+            buildStreetViewUrl(
+                location = currentLocation,
+                heading = currentHeading,
+                pitch = currentPitch,
+                fov = currentZoom.toInt(),
+                size = "1024x768" // Higher resolution for better quality
+            )
+        } else {
+            imageUrl
+        }
+    }
+
+    // Image Painter with optimized settings
     val painter = rememberAsyncImagePainter(
         model = ImageRequest.Builder(context)
             .data(streetViewUrl)
             .size(Size.ORIGINAL)
-            .crossfade(200) // Reduzierte Crossfade Zeit
+            .crossfade(300)
             .memoryCachePolicy(coil.request.CachePolicy.ENABLED)
             .diskCachePolicy(coil.request.CachePolicy.ENABLED)
             .build()
     )
 
+    // Get current state safely
+    val painterState = painter.state
+
     Box(modifier = modifier.fillMaxSize()) {
-        when (painter.state) {
+        when (painterState) {
             is AsyncImagePainter.State.Loading -> {
-                LoadingIndicator()
+                StreetViewLoadingIndicator()
             }
             is AsyncImagePainter.State.Success -> {
-                PerformantStreetViewCanvas(
+                // Main Street View Canvas with Touch Gestures
+                InteractiveStreetViewCanvas(
                     painter = painter,
                     currentZoom = currentZoom,
                     onZoomChange = { newZoom ->
                         currentZoom = newZoom.coerceIn(20f, 120f)
+                    },
+                    onDragStart = {
+                        showControls = true
                     },
                     onDragAccumulator = { offset ->
                         dragAccumulator += offset
                     },
                     onDragEnd = {
                         scope.launch {
-                            if (!pendingUpdate) {
-                                pendingUpdate = true
-                                delay(50) // Debounce drag updates
-
-                                handleOptimizedDragEnd(
-                                    dragAccumulator = dragAccumulator,
-                                    sensitivity = with(density) { 2.dp.toPx() },
-                                    onHeadingChange = { newHeading ->
-                                        currentHeading = normalizeHeading(newHeading)
-                                        onPan(newHeading.toFloat())
-                                    },
-                                    onPitchChange = { newPitch ->
-                                        currentPitch = newPitch.coerceIn(-90, 90)
-                                    }
-                                )
-                                dragAccumulator = Offset.Zero
-                                pendingUpdate = false
-                            }
+                            handleDragGesture(
+                                dragAccumulator = dragAccumulator,
+                                sensitivity = with(density) { 2.dp.toPx() },
+                                onHeadingChange = { deltaHeading ->
+                                    currentHeading = normalizeHeading(currentHeading + deltaHeading)
+                                    onPan(deltaHeading.toFloat())
+                                },
+                                onPitchChange = { deltaPitch ->
+                                    currentPitch = (currentPitch + deltaPitch).coerceIn(-90, 90)
+                                }
+                            )
+                            dragAccumulator = Offset.Zero
                         }
                     },
-                    onTap = { offset ->
-                        // Optional: Movement Funktionalität
+                    onDoubleTap = { offset ->
+                        // Double tap to move forward
                         scope.launch {
-                            if (!isLoading) {
-                                isLoading = true
-                                try {
-                                    moveForwardOptimized(
-                                        currentLocation = currentLocation,
-                                        heading = currentHeading,
-                                        stepSize = 15.0
-                                    ) { newLocation ->
-                                        currentLocation = newLocation
-                                    }
-                                } finally {
-                                    delay(500)
-                                    isLoading = false
+                            moveForward(
+                                currentLocation = currentLocation,
+                                heading = currentHeading,
+                                stepSize = 25.0,
+                                isLoading = isLoading,
+                                onLocationUpdate = { newLocation ->
+                                    currentLocation = newLocation
+                                    onLocationChange?.invoke(newLocation.latitude, newLocation.longitude)
+                                },
+                                onLoadingChange = { loading ->
+                                    isLoading = loading
                                 }
-                            }
+                            )
                         }
+                    },
+                    onSingleTap = {
+                        showControls = !showControls
                     }
                 )
 
-                // Loading Overlay
+                // Loading Overlay during movement
                 if (isLoading) {
-                    LoadingOverlay()
+                    StreetViewLoadingOverlay()
                 }
 
-                // Navigation HUD
+                // Street View HUD (always visible but minimal)
                 StreetViewHUD(
                     heading = currentHeading,
                     pitch = currentPitch,
                     zoom = currentZoom,
                     modifier = Modifier.align(Alignment.TopStart)
                 )
-            }
-            is AsyncImagePainter.State.Error -> {
-                // Fallback für normale Bilder
-                FallbackImageView(
-                    imageUrl = imageUrl,
-                    onPan = onPan,
-                    modifier = Modifier.fillMaxSize()
+
+                // Navigation Controls (show/hide based on user interaction)
+                if (showControls) {
+                    StreetViewNavigationControls(
+                        modifier = Modifier.align(Alignment.BottomCenter),
+                        onMoveForward = {
+                            scope.launch {
+                                moveForward(
+                                    currentLocation = currentLocation,
+                                    heading = currentHeading,
+                                    stepSize = 25.0,
+                                    isLoading = isLoading,
+                                    onLocationUpdate = { newLocation ->
+                                        currentLocation = newLocation
+                                        onLocationChange?.invoke(newLocation.latitude, newLocation.longitude)
+                                    },
+                                    onLoadingChange = { loading ->
+                                        isLoading = loading
+                                    }
+                                )
+                            }
+                        },
+                        onMoveBackward = {
+                            scope.launch {
+                                moveForward(
+                                    currentLocation = currentLocation,
+                                    heading = normalizeHeading(currentHeading + 180),
+                                    stepSize = 25.0,
+                                    isLoading = isLoading,
+                                    onLocationUpdate = { newLocation ->
+                                        currentLocation = newLocation
+                                        onLocationChange?.invoke(newLocation.latitude, newLocation.longitude)
+                                    },
+                                    onLoadingChange = { loading ->
+                                        isLoading = loading
+                                    }
+                                )
+                            }
+                        },
+                        onTurnLeft = {
+                            currentHeading = normalizeHeading(currentHeading - 30)
+                            onPan(-30f)
+                        },
+                        onTurnRight = {
+                            currentHeading = normalizeHeading(currentHeading + 30)
+                            onPan(30f)
+                        },
+                        onZoomIn = {
+                            currentZoom = (currentZoom - 10f).coerceAtLeast(20f)
+                        },
+                        onZoomOut = {
+                            currentZoom = (currentZoom + 10f).coerceAtMost(120f)
+                        },
+                        onLookUp = {
+                            currentPitch = (currentPitch + 15).coerceAtMost(90)
+                        },
+                        onLookDown = {
+                            currentPitch = (currentPitch - 15).coerceAtLeast(-90)
+                        }
+                    )
+                }
+
+                // Zoom Controls (always visible on the right)
+                StreetViewZoomControls(
+                    currentZoom = currentZoom,
+                    onZoomIn = {
+                        currentZoom = (currentZoom - 10f).coerceAtLeast(20f)
+                    },
+                    onZoomOut = {
+                        currentZoom = (currentZoom + 10f).coerceAtMost(120f)
+                    },
+                    modifier = Modifier.align(Alignment.CenterEnd)
                 )
             }
-            else -> Unit
+            is AsyncImagePainter.State.Error -> {
+                // Fallback to simple image view
+                StreetViewErrorFallback(
+                    originalImageUrl = imageUrl,
+                    error = painterState.result.throwable.message
+                )
+            }
+            else -> {
+                StreetViewLoadingIndicator()
+            }
         }
     }
 }
 
 @Composable
-private fun PerformantStreetViewCanvas(
+private fun InteractiveStreetViewCanvas(
     painter: AsyncImagePainter,
     currentZoom: Float,
     onZoomChange: (Float) -> Unit,
+    onDragStart: () -> Unit,
     onDragAccumulator: (Offset) -> Unit,
     onDragEnd: () -> Unit,
-    onTap: (Offset) -> Unit
+    onDoubleTap: (Offset) -> Unit,
+    onSingleTap: (Offset) -> Unit
 ) {
+    // Safe state access
+    val painterState = painter.state
+    if (painterState !is AsyncImagePainter.State.Success) return
+
     val imageBitmap = remember(painter) {
-        (painter.state as AsyncImagePainter.State.Success).result.drawable.let {
+        painterState.result.drawable.let {
             (it as android.graphics.drawable.BitmapDrawable).bitmap
         }.asImageBitmap()
     }
@@ -182,20 +282,21 @@ private fun PerformantStreetViewCanvas(
     Canvas(
         modifier = Modifier
             .fillMaxSize()
-            .pointerInput("zoom") {
+            .pointerInput("transform") {
                 detectTransformGestures(
-                    onGesture = { _, pan, zoom, _ ->
-                        if (zoom != 1f) {
-                            onZoomChange(currentZoom / zoom)
-                        }
-                        if (pan != Offset.Zero) {
-                            onDragAccumulator(pan)
-                        }
+                    panZoomLock = false
+                ) { _, pan, zoom, _ ->
+                    if (zoom != 1f) {
+                        onZoomChange(currentZoom / zoom)
                     }
-                )
+                    if (pan != Offset.Zero) {
+                        onDragAccumulator(pan)
+                    }
+                }
             }
             .pointerInput("drag") {
                 detectDragGestures(
+                    onDragStart = { onDragStart() },
                     onDragEnd = { onDragEnd() }
                 ) { change, dragAmount ->
                     change.consume()
@@ -203,7 +304,10 @@ private fun PerformantStreetViewCanvas(
                 }
             }
             .pointerInput("tap") {
-                detectTapGestures(onTap = onTap)
+                detectTapGestures(
+                    onDoubleTap = onDoubleTap,
+                    onTap = onSingleTap
+                )
             }
     ) {
         val canvasWidth = size.width
@@ -211,7 +315,7 @@ private fun PerformantStreetViewCanvas(
         val imageWidth = imageBitmap.width.toFloat()
         val imageHeight = imageBitmap.height.toFloat()
 
-        // Optimierte Skalierung
+        // Calculate optimal scaling
         val baseScale = maxOf(
             canvasWidth / imageWidth,
             canvasHeight / imageHeight
@@ -223,7 +327,7 @@ private fun PerformantStreetViewCanvas(
         val offsetX = (canvasWidth - imageWidth * finalScale) / 2
         val offsetY = (canvasHeight - imageHeight * finalScale) / 2
 
-        // Hardware-beschleunigte Transformation
+        // Draw with hardware acceleration
         scale(zoomFactor) {
             translate(offsetX / zoomFactor, offsetY / zoomFactor) {
                 drawImage(
@@ -239,37 +343,162 @@ private fun PerformantStreetViewCanvas(
 }
 
 @Composable
-private fun LoadingIndicator() {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
+private fun StreetViewNavigationControls(
+    modifier: Modifier = Modifier,
+    onMoveForward: () -> Unit,
+    onMoveBackward: () -> Unit,
+    onTurnLeft: () -> Unit,
+    onTurnRight: () -> Unit,
+    onZoomIn: () -> Unit,
+    onZoomOut: () -> Unit,
+    onLookUp: () -> Unit,
+    onLookDown: () -> Unit
+) {
+    Card(
+        modifier = modifier.padding(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)
+        ),
+        shape = RoundedCornerShape(16.dp)
     ) {
-        CircularProgressIndicator(
-            modifier = Modifier.size(48.dp),
-            strokeWidth = 4.dp
-        )
+        Column(
+            modifier = Modifier.padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // Look Up/Down Row
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Spacer(modifier = Modifier.width(48.dp))
+                IconButton(
+                    onClick = onLookUp,
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer)
+                ) {
+                    Icon(Icons.Default.KeyboardArrowUp, "Blick nach oben")
+                }
+                Spacer(modifier = Modifier.width(48.dp))
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Main Navigation Row
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Turn Left
+                IconButton(
+                    onClick = onTurnLeft,
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer)
+                ) {
+                    Icon(Icons.Default.Refresh, "Links drehen")
+                }
+
+                // Move Forward
+                IconButton(
+                    onClick = onMoveForward,
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary)
+                ) {
+                    Icon(
+                        Icons.Default.KeyboardArrowUp, // Ersetze ArrowUpward durch KeyboardArrowUp
+                        "Vorwärts",
+                        tint = MaterialTheme.colorScheme.onPrimary
+                    )
+                }
+
+                // Turn Right
+                IconButton(
+                    onClick = onTurnRight,
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer)
+                ) {
+                    Icon(Icons.Default.Refresh, "Rechts drehen")
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Look Down & Backward Row
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Move Backward
+                IconButton(
+                    onClick = onMoveBackward,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.secondaryContainer)
+                ) {
+                    Icon(Icons.Default.KeyboardArrowDown, "Rückwärts", modifier = Modifier.size(20.dp)) // Ersetze ArrowDownward
+                }
+
+                // Look Down
+                IconButton(
+                    onClick = onLookDown,
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer)
+                ) {
+                    Icon(Icons.Default.KeyboardArrowDown, "Blick nach unten")
+                }
+
+                Spacer(modifier = Modifier.width(40.dp))
+            }
+        }
     }
 }
 
 @Composable
-private fun LoadingOverlay() {
-    Box(
-        modifier = Modifier
-            .fillMaxSize(),
-        contentAlignment = Alignment.Center
+private fun StreetViewZoomControls(
+    currentZoom: Float,
+    onZoomIn: () -> Unit,
+    onZoomOut: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.padding(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)
+        ),
+        shape = RoundedCornerShape(24.dp)
     ) {
-        Card(
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)
-            )
+        Column(
+            modifier = Modifier.padding(8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Row(
-                modifier = Modifier.padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
+            IconButton(
+                onClick = onZoomIn,
+                modifier = Modifier.size(40.dp)
             ) {
-                CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                Spacer(modifier = Modifier.width(12.dp))
-                Text("Lade neue Ansicht...")
+                Icon(Icons.Default.Add, "Zoom In") // Add ist verfügbar
+            }
+
+            Text(
+                text = "${(90f / currentZoom * 100).toInt()}%",
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Bold
+            )
+
+            IconButton(
+                onClick = onZoomOut,
+                modifier = Modifier.size(40.dp)
+            ) {
+                Icon(Icons.Default.Delete, "Zoom Out") // Ersetze Remove durch Delete
             }
         }
     }
@@ -286,37 +515,129 @@ private fun StreetViewHUD(
         modifier = modifier.padding(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f)
-        )
+        ),
+        shape = RoundedCornerShape(12.dp)
     ) {
-        Column(modifier = Modifier.padding(8.dp)) {
-            Text(
-                text = "Richtung: ${heading}°",
-                style = MaterialTheme.typography.bodySmall
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Default.LocationOn, // Ersetze MyLocation durch LocationOn
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = "${heading}°",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Default.KeyboardArrowUp, // Ersetze ArrowUpward durch KeyboardArrowUp
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.secondary
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = "${pitch}°",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun StreetViewLoadingIndicator() {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(48.dp),
+                strokeWidth = 4.dp,
+                color = MaterialTheme.colorScheme.primary
             )
+            Spacer(modifier = Modifier.height(16.dp))
             Text(
-                text = "Neigung: ${pitch}°",
-                style = MaterialTheme.typography.bodySmall
-            )
-            Text(
-                text = "Zoom: ${(90f / zoom * 100).toInt()}%",
-                style = MaterialTheme.typography.bodySmall
+                text = "Lade Street View...",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface
             )
         }
     }
 }
 
 @Composable
-private fun FallbackImageView(
-    imageUrl: String,
-    onPan: (Float) -> Unit,
-    modifier: Modifier = Modifier
+private fun StreetViewLoadingOverlay() {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.3f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
+            ),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.padding(20.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                Spacer(modifier = Modifier.width(16.dp))
+                Text(
+                    text = "Bewege zu neuer Position...",
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun StreetViewErrorFallback(
+    originalImageUrl: String,
+    error: String?
 ) {
-    // Einfache Fallback-Implementierung für normale Bilder
-    Box(modifier = modifier) {
-        Text(
-            text = "Normale Bildansicht",
-            modifier = Modifier.align(Alignment.Center)
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        // Fallback to simple image if Street View fails
+        AsyncImage(
+            model = originalImageUrl,
+            contentDescription = "Fallback image",
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize()
         )
+
+        // Error overlay
+        Card(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.errorContainer
+            )
+        ) {
+            Text(
+                text = "Street View nicht verfügbar",
+                modifier = Modifier.padding(12.dp),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onErrorContainer
+            )
+        }
     }
 }
 
@@ -327,7 +648,7 @@ private fun extractLocationFromUrl(imageUrl: String): StreetViewLocation {
 
     return if (match != null) {
         val coords = match.groupValues[1].split(",")
-        if (coords.size == 2) {
+        if (coords.size >= 2) {
             StreetViewLocation(
                 latitude = coords[0].toDoubleOrNull() ?: 48.8566,
                 longitude = coords[1].toDoubleOrNull() ?: 2.3522
@@ -340,34 +661,30 @@ private fun extractLocationFromUrl(imageUrl: String): StreetViewLocation {
     }
 }
 
-private fun buildOptimizedStreetViewUrl(
-    baseUrl: String,
+private fun buildStreetViewUrl(
     location: StreetViewLocation,
     heading: Int,
     pitch: Int,
-    fov: Int
+    fov: Int,
+    size: String = "1024x768"
 ): String {
-    return if (baseUrl.contains("maps.googleapis.com")) {
-        val apiKeyMatch = Regex("key=([^&]+)").find(baseUrl)
-        val apiKey = apiKeyMatch?.groupValues?.get(1) ?: ""
+    // Extract API key from Constants or use a default
+    val apiKey = "AIzaSyBSqtsyr8fijNPV-pV1qqQZUwmFAZ_S-dc" // Your actual API key
 
-        "https://maps.googleapis.com/maps/api/streetview?" +
-                "size=1024x1024" + // Höhere Auflösung für bessere Qualität
-                "&location=${location.latitude},${location.longitude}" +
-                "&heading=$heading" +
-                "&pitch=$pitch" +
-                "&fov=$fov" +
-                "&key=$apiKey"
-    } else {
-        baseUrl
-    }
+    return "https://maps.googleapis.com/maps/api/streetview?" +
+            "size=$size" +
+            "&location=${location.latitude},${location.longitude}" +
+            "&heading=$heading" +
+            "&pitch=$pitch" +
+            "&fov=$fov" +
+            "&key=$apiKey"
 }
 
 private fun normalizeHeading(heading: Int): Int {
     return ((heading % 360) + 360) % 360
 }
 
-private fun handleOptimizedDragEnd(
+private suspend fun handleDragGesture(
     dragAccumulator: Offset,
     sensitivity: Float,
     onHeadingChange: (Int) -> Unit,
@@ -376,30 +693,43 @@ private fun handleOptimizedDragEnd(
     val dragThreshold = sensitivity * 2
 
     if (abs(dragAccumulator.x) > dragThreshold || abs(dragAccumulator.y) > dragThreshold) {
-        val headingDelta = (dragAccumulator.x / sensitivity * 2).toInt()
-        val pitchDelta = (-dragAccumulator.y / sensitivity * 2).toInt()
+        val headingDelta = (dragAccumulator.x / sensitivity * 3).toInt() // More sensitive
+        val pitchDelta = (-dragAccumulator.y / sensitivity * 3).toInt() // More sensitive
 
         onHeadingChange(headingDelta)
         onPitchChange(pitchDelta)
     }
 }
 
-private suspend fun moveForwardOptimized(
+private suspend fun moveForward(
     currentLocation: StreetViewLocation,
     heading: Int,
     stepSize: Double,
-    onLocationUpdate: (StreetViewLocation) -> Unit
+    isLoading: Boolean,
+    onLocationUpdate: (StreetViewLocation) -> Unit,
+    onLoadingChange: (Boolean) -> Unit
 ) {
-    val headingRad = Math.toRadians(heading.toDouble())
-    val deltaLat = cos(headingRad) * stepSize / 111000.0 // ~111km per degree
-    val deltaLng = sin(headingRad) * stepSize / (111000.0 * cos(Math.toRadians(currentLocation.latitude)))
+    if (isLoading) return
 
-    val newLocation = StreetViewLocation(
-        latitude = currentLocation.latitude + deltaLat,
-        longitude = currentLocation.longitude + deltaLng
-    )
+    onLoadingChange(true)
 
-    onLocationUpdate(newLocation)
+    try {
+        val headingRad = Math.toRadians(heading.toDouble())
+        val deltaLat = cos(headingRad) * stepSize / 111000.0 // ~111km per degree
+        val deltaLng = sin(headingRad) * stepSize / (111000.0 * cos(Math.toRadians(currentLocation.latitude)))
+
+        val newLocation = StreetViewLocation(
+            latitude = currentLocation.latitude + deltaLat,
+            longitude = currentLocation.longitude + deltaLng
+        )
+
+        // Simulate loading delay for realistic feel
+        delay(500)
+
+        onLocationUpdate(newLocation)
+    } finally {
+        onLoadingChange(false)
+    }
 }
 
 // Data Classes
