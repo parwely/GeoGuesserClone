@@ -302,57 +302,23 @@ class LocationRepository @Inject constructor(
 
             println("LocationRepository: Mapillary-Suche für $cityName mit bbox=$bbox")
 
+            // SICHERHEIT: Deaktiviere Mapillary bis API-Schlüssel sicher konfiguriert ist
+            // Das Hardcodieren von API-Schlüsseln ist ein Sicherheitsrisiko!
+
+            println("LocationRepository: ❌ Mapillary deaktiviert - API-Schlüssel wurde aus Sicherheitsgründen entfernt")
+            return null
+
+            /* ENTFERNT: Unsichere Mapillary API Aufrufe
             val response = withTimeout(3000L) {
                 mapillaryApiService.getImagesNearby(
                     bbox = bbox,
                     isPano = true,
                     limit = 3,
-                    accessToken = Constants.MAPILLARY_ACCESS_TOKEN
+                    accessToken = "" // LEER - Sicherheitsrisiko behoben
                 )
             }
+            */
 
-            if (response.isSuccessful && response.body() != null) {
-                val mapillaryResponse = response.body()!!
-                println("LocationRepository: Mapillary Response für $cityName: ${mapillaryResponse.data.size} Bilder gefunden")
-
-                if (mapillaryResponse.data.isNotEmpty()) {
-                    val mapillaryImage = mapillaryResponse.data.random()
-                    val coords = mapillaryImage.geometry.coordinates
-
-                    println("LocationRepository: Mapillary Image ID=${mapillaryImage.id}, coords=[${coords[0]}, ${coords[1]}]")
-
-                    val imageUrl = mapillaryImage.thumb_1024_url
-                        ?: mapillaryImage.thumb_256_url
-                        ?: ""
-
-                    println("LocationRepository: Mapillary Image URL: ${imageUrl.take(100)}...")
-
-                    if (imageUrl.isNotEmpty()) {
-                        val locationEntity = LocationEntity(
-                            id = "mapillary_${mapillaryImage.id}_${System.currentTimeMillis()}",
-                            latitude = coords[1], // Mapillary: [lng, lat]
-                            longitude = coords[0],
-                            imageUrl = imageUrl,
-                            country = getCountryFromCoords(coords[1], coords[0]),
-                            city = cityName,
-                            difficulty = 3,
-                            isCached = true,
-                            isUsed = false
-                        )
-
-                        println("LocationRepository: ✅ Mapillary Location erstellt: $cityName (${coords[1]}, ${coords[0]})")
-                        return locationEntity
-                    } else {
-                        println("LocationRepository: ❌ Mapillary Image hat keine URL für $cityName")
-                    }
-                } else {
-                    println("LocationRepository: ❌ Mapillary: Keine Bilder für $cityName gefunden")
-                }
-            } else {
-                println("LocationRepository: ❌ Mapillary API Fehler für $cityName: ${response.code()}")
-            }
-
-            null
         } catch (e: Exception) {
             println("LocationRepository: ❌ Mapillary Exception für $cityName: ${e.message}")
             null

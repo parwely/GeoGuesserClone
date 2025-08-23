@@ -81,14 +81,6 @@
             </PendingDiffInfo>
           </value>
         </entry>
-        <entry key="$PROJECT_DIR$/app/src/main/java/com/example/geogeusserclone/data/database/entities/UserEntity.kt">
-          <value>
-            <PendingDiffInfo>
-              <option name="filePath" value="$PROJECT_DIR$/app/src/main/java/com/example/geogeusserclone/data/database/entities/UserEntity.kt" />
-              <option name="updatedContent" value="package com.example.geogeusserclone.data.database.entities&#10;&#10;import androidx.room.Entity&#10;import androidx.room.PrimaryKey&#10;&#10;@Entity(tableName = &quot;users&quot;)&#10;data class UserEntity(&#10;    @PrimaryKey&#10;    val id: String,&#10;    val username: String,&#10;    val email: String,&#10;    val authToken: String? = null,&#10;    val totalScore: Int = 0,&#10;    val gamesPlayed: Int = 0,&#10;    val bestScore: Int = 0,&#10;    val lastLoginAt: Long = 0L,&#10;    val createdAt: Long = System.currentTimeMillis()&#10;)" />
-            </PendingDiffInfo>
-          </value>
-        </entry>
         <entry key="$PROJECT_DIR$/app/src/main/java/com/example/geogeusserclone/data/models/GameState.kt">
           <value>
             <PendingDiffInfo>

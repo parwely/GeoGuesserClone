@@ -69,21 +69,11 @@ fun InteractiveStreetView(
         }
     }
 
-    // Debounced Street View URL
-    val streetViewUrl = remember(currentHeading, currentPitch, currentZoom, currentLocation) {
-        val currentTime = System.currentTimeMillis()
-        if (currentTime - lastUpdateTime > 100) { // 100ms debounce
-            lastUpdateTime = currentTime
-            buildStreetViewUrl(
-                location = currentLocation,
-                heading = currentHeading,
-                pitch = currentPitch,
-                fov = currentZoom.toInt(),
-                size = "1024x768" // Higher resolution for better quality
-            )
-        } else {
-            imageUrl
-        }
+    // Debounced Street View URL - KORRIGIERT: Verwende nur Backend-URLs
+    val streetViewUrl = remember(imageUrl) {
+        // SICHERHEIT: Verwende NIEMALS clientseitige Street View URL Generation!
+        // Alle URLs müssen vom Backend kommen
+        imageUrl
     }
 
     // Image Painter with optimized settings
@@ -659,25 +649,6 @@ private fun extractLocationFromUrl(imageUrl: String): StreetViewLocation {
     } else {
         StreetViewLocation(48.8566, 2.3522) // Paris fallback
     }
-}
-
-private fun buildStreetViewUrl(
-    location: StreetViewLocation,
-    heading: Int,
-    pitch: Int,
-    fov: Int,
-    size: String = "1024x768"
-): String {
-    // Extract API key from Constants or use a default
-    val apiKey = "" // Your actual API key
-
-    return "https://maps.googleapis.com/maps/api/streetview?" +
-            "size=$size" +
-            "&location=${location.latitude},${location.longitude}" +
-            "&heading=$heading" +
-            "&pitch=$pitch" +
-            "&fov=$fov" +
-            "&key=$apiKey"
 }
 
 private fun normalizeHeading(heading: Int): Int {

@@ -8,7 +8,8 @@ object Constants {
 
     // Mapillary als Fallback (nur wenn Backend nicht verfügbar)
     const val MAPILLARY_BASE_URL = "https://graph.mapillary.com/"
-    const val MAPILLARY_ACCESS_TOKEN = "MLY|4142433049200173|72206abe5035850d6743b23a49c41333"
+    // SICHERHEIT: API-Schlüssel NIEMALS im Code! Verwende BuildConfig oder Environment Variables
+    const val MAPILLARY_ACCESS_TOKEN = "" // ENTFERNT - Verwende BuildConfig.MAPILLARY_API_KEY
 
     // Network Timeouts angepasst an deine Spezifikation
     const val CONNECT_TIMEOUT = 30L
