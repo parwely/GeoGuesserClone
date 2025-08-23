@@ -29,53 +29,61 @@ class GameRepository @Inject constructor(
         rounds: Int = 5
     ): Result<GameEntity> {
         return try {
-            // Verwende Backend API
-            val response = apiService.createSinglePlayerGame(
-                GameCreateRequest(
-                    difficulty = 2,
-                    category = "urban",
-                    rounds = rounds
-                )
-            )
+            // KORREKTUR: Stelle sicher, dass User angemeldet ist für Backend-Games
+            val currentUser = userRepository.getCurrentUser()
 
-            if (response.isSuccessful) {
-                val gameResponse = response.body()!!
-                if (gameResponse.success) {
-                    val gameEntity = GameEntity(
-                        id = gameResponse.data.gameId.toString(), // Convert Int to String
-                        userId = userId,
-                        gameMode = gameMode,
-                        totalRounds = rounds,
-                        currentRound = 1,
-                        score = 0,
-                        isCompleted = false,
-                        createdAt = System.currentTimeMillis(),
-                        startedAt = System.currentTimeMillis()
+            if (currentUser?.authToken != null) {
+                // Verwende Backend API nur mit gültigem Token
+                val response = apiService.createSinglePlayerGame(
+                    GameCreateRequest(
+                        difficulty = 2,
+                        category = "urban",
+                        rounds = rounds
                     )
-                    gameDao.insertGame(gameEntity)
+                )
 
-                    // Speichere die Locations aus dem Backend
-                    val locationEntities = gameResponse.data.locations.map { backendLocation ->
-                        LocationEntity(
-                            id = backendLocation.id.toString(), // Convert Int to String
-                            latitude = backendLocation.coordinates.latitude,
-                            longitude = backendLocation.coordinates.longitude,
-                            imageUrl = backendLocation.imageUrls.firstOrNull() ?: "",
-                            country = backendLocation.country,
-                            city = backendLocation.city,
-                            difficulty = backendLocation.difficulty,
-                            isCached = true,
-                            isUsed = false
+                if (response.isSuccessful) {
+                    val gameResponse = response.body()!!
+                    if (gameResponse.success) {
+                        val gameEntity = GameEntity(
+                            id = gameResponse.data.gameId.toString(), // Convert Int to String
+                            userId = userId,
+                            gameMode = gameMode,
+                            totalRounds = rounds,
+                            currentRound = 1,
+                            score = 0,
+                            isCompleted = false,
+                            createdAt = System.currentTimeMillis(),
+                            startedAt = System.currentTimeMillis()
                         )
-                    }
-                    locationDao.insertLocations(locationEntities)
+                        gameDao.insertGame(gameEntity)
 
-                    return Result.success(gameEntity)
+                        // Speichere die Locations aus dem Backend
+                        val locationEntities = gameResponse.data.locations.map { backendLocation ->
+                            LocationEntity(
+                                id = backendLocation.id.toString(), // Convert Int to String
+                                latitude = backendLocation.coordinates.latitude,
+                                longitude = backendLocation.coordinates.longitude,
+                                imageUrl = backendLocation.imageUrls.firstOrNull() ?: "",
+                                country = backendLocation.country,
+                                city = backendLocation.city,
+                                difficulty = backendLocation.difficulty,
+                                isCached = true,
+                                isUsed = false
+                            )
+                        }
+                        locationDao.insertLocations(locationEntities)
+
+                        return Result.success(gameEntity)
+                    }
                 }
             }
-            // Fallback für Offline-Modus
+
+            // Fallback für Offline-Modus oder wenn kein Auth Token vorhanden
+            println("GameRepository: Verwende Offline-Modus (kein gültiger Auth Token)")
             createOfflineGame(userId, gameMode, rounds)
         } catch (e: Exception) {
+            println("GameRepository: Backend-Fehler, verwende Offline-Modus: ${e.message}")
             // Fallback für Offline-Modus
             createOfflineGame(userId, gameMode, rounds)
         }

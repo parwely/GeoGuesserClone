@@ -2,6 +2,7 @@ package com.example.geogeusserclone.data.repositories
 
 import com.example.geogeusserclone.data.database.dao.LocationDao
 import com.example.geogeusserclone.data.database.entities.LocationEntity
+import com.example.geogeusserclone.data.network.ApiRetryHandler
 import com.example.geogeusserclone.data.network.ApiService
 import com.example.geogeusserclone.data.network.MapillaryApiService
 import com.example.geogeusserclone.utils.Constants
@@ -100,55 +101,82 @@ class LocationRepository @Inject constructor(
 
     private suspend fun getLocationFromBackendOptimized(): Result<LocationEntity> {
         return try {
-            println("LocationRepository: Optimierter Backend-Aufruf...")
+            println("LocationRepository: Optimierter Backend-Aufruf mit Retry-Mechanismus...")
 
-            // Parallele Anfragen für bessere Performance
-            val response = withTimeout(3000L) {
-                apiService.getRandomLocations(count = 1, difficulty = 2, category = "urban")
+            // KORREKTUR: Verwende ApiRetryHandler für robuste Backend-Calls
+            val response = ApiRetryHandler.executeLocationRetry(
+                categories = listOf("urban", "landmark", "rural", "desert", "mountain", "coastal", "forest"),
+                difficulties = listOf(1, 2, 3)
+            ) { category, difficulty ->
+                apiService.getRandomLocations(
+                    count = 5, // Erhöhte Ausbeute
+                    difficulty = difficulty,
+                    category = category
+                )
             }
 
-            if (response.isSuccessful && response.body() != null) {
+            if (response?.isSuccessful == true && response.body() != null) {
                 val locationsResponse = response.body()!!
                 if (locationsResponse.success && locationsResponse.data.locations.isNotEmpty()) {
+                    // Nehme erste verfügbare Location
                     val backendLocation = locationsResponse.data.locations.first()
 
-                    // Prüfe auf Duplikate
+                    // ENTSPANNTE Duplikat-Prüfung
                     val coordHash = "${backendLocation.coordinates.latitude}-${backendLocation.coordinates.longitude}"
-                    if (coordHash in locationCache) {
-                        println("LocationRepository: Backend-Location ist Duplikat, verwerfe...")
-                        return Result.failure(Exception("Duplikat gefunden"))
-                    }
+                    val isExactDuplicate = coordHash in locationCache
 
-                    // Street View Anfrage für bessere Performance
-                    val streetViewUrl = try {
-                        withTimeout(2000L) {
-                            getStreetViewForLocationOptimized(backendLocation.id).getOrNull()
+                    if (!isExactDuplicate) {
+                        return createLocationEntity(backendLocation, "backend_optimized")
+                    } else {
+                        // Bei Duplikat: versuche andere Location aus Response
+                        val uniqueLocation = locationsResponse.data.locations.find { location ->
+                            val hash = "${location.coordinates.latitude}-${location.coordinates.longitude}"
+                            hash !in locationCache
                         }
-                    } catch (e: Exception) {
-                        null
-                    } ?: backendLocation.imageUrls.firstOrNull() ?: ""
 
-                    val locationEntity = LocationEntity(
-                        id = "backend_${backendLocation.id}_${System.currentTimeMillis()}",
-                        latitude = backendLocation.coordinates.latitude,
-                        longitude = backendLocation.coordinates.longitude,
-                        imageUrl = streetViewUrl,
-                        country = backendLocation.country,
-                        city = backendLocation.city,
-                        difficulty = backendLocation.difficulty,
-                        isCached = true,
-                        isUsed = false
-                    )
-
-                    locationDao.insertLocation(locationEntity)
-                    addToCache(locationEntity)
-                    return Result.success(locationEntity)
+                        if (uniqueLocation != null) {
+                            return createLocationEntity(uniqueLocation, "backend_unique")
+                        }
+                    }
                 }
             }
-            Result.failure(Exception("Backend Response fehlerhaft"))
+
+            Result.failure(Exception("Backend-Aufruf mit Retry fehlgeschlagen"))
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    // Hilfsfunktion für Location-Erstellung
+    private suspend fun createLocationEntity(
+        backendLocation: com.example.geogeusserclone.data.network.BackendLocation,
+        prefix: String
+    ): Result<LocationEntity> {
+        // Street View Anfrage für bessere Performance
+        val streetViewUrl = try {
+            withTimeout(2000L) {
+                getStreetViewForLocationOptimized(backendLocation.id).getOrNull()
+            }
+        } catch (e: Exception) {
+            null
+        } ?: backendLocation.imageUrls.firstOrNull() ?: ""
+
+        val locationEntity = LocationEntity(
+            id = "${prefix}_${backendLocation.id}_${System.currentTimeMillis()}",
+            latitude = backendLocation.coordinates.latitude,
+            longitude = backendLocation.coordinates.longitude,
+            imageUrl = streetViewUrl,
+            country = backendLocation.country,
+            city = backendLocation.city,
+            difficulty = backendLocation.difficulty,
+            isCached = true,
+            isUsed = false
+        )
+
+        locationDao.insertLocation(locationEntity)
+        addToCache(locationEntity)
+        println("LocationRepository: ✅ Backend-Location erfolgreich erstellt: ${locationEntity.city}")
+        return Result.success(locationEntity)
     }
 
     private suspend fun getStreetViewForLocationOptimized(locationId: Int): Result<String> {
@@ -231,7 +259,7 @@ class LocationRepository @Inject constructor(
             val latOffset = 0.05 // Kleinerer Radius für mehr Präzision
             val lngOffset = 0.05
             val bbox = "${lng - lngOffset},${lat - latOffset},${lng + lngOffset},${lat + latOffset}"
-            
+
             val response = withTimeout(3000L) {
                 mapillaryApiService.getImagesNearby(
                     bbox = bbox,
@@ -240,17 +268,17 @@ class LocationRepository @Inject constructor(
                     accessToken = Constants.MAPILLARY_ACCESS_TOKEN
                 )
             }
-            
+
             if (response.isSuccessful && response.body() != null) {
                 val mapillaryResponse = response.body()!!
                 if (mapillaryResponse.data.isNotEmpty()) {
                     val mapillaryImage = mapillaryResponse.data.random()
                     val coords = mapillaryImage.geometry.coordinates
-                    
+
                     val imageUrl = mapillaryImage.thumb_1024_url
                         ?: mapillaryImage.thumb_256_url
                         ?: ""
-                    
+
                     if (imageUrl.isNotEmpty()) {
                         LocationEntity(
                             id = "mapillary_${mapillaryImage.id}_${System.currentTimeMillis()}",

@@ -197,9 +197,7 @@ private fun GuessResultCard(
                         text = guess.score.toString(),
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.Bold,
-                        color = ScoreCalculator.getScoreColor(
-                            ScoreCalculator.getScoreRating(guess.score)
-                        )
+                        color = ScoreCalculator.getScoreColor(guess.score)
                     )
                 }
 

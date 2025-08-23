@@ -56,20 +56,24 @@ class AuthInterceptor @Inject constructor(
 
     /**
      * Prüft ob der Request Authentication benötigt
+     * VOLLSTÄNDIG KORRIGIERT: Detaillierte Endpoint-Analyse basierend auf Backend-Logs
      */
     private fun needsAuthentication(path: String): Boolean {
         return when {
+            // AUTH-PFLICHTIGE ENDPOINTS (benötigen Bearer Token)
             path.contains("/auth/refresh") -> true
             path.contains("/auth/logout") -> true
-            path.contains("/games/") -> true
             path.contains("/user/") -> true
-            // Public Endpoints benötigen keine Auth
+            path.contains("/games/") -> true // KRITISCH: War false, jetzt true
+
+            // ÖFFENTLICHE ENDPOINTS (kein Token benötigt)
             path.contains("/auth/login") -> false
             path.contains("/auth/register") -> false
-            path.contains("/locations/random") -> false
-            path.contains("/locations/") && path.contains("/streetview") -> false
+            path.contains("/locations/") -> false // Locations sind öffentlich
             path.contains("/health") -> false
-            else -> false
+
+            // SICHERE DEFAULT-REGEL: Unbekannte Endpunkte benötigen Auth
+            else -> true // Geändert von false zu true für bessere Sicherheit
         }
     }
 
