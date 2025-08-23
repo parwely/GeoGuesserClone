@@ -87,6 +87,7 @@ object ApiRetryHandler {
 
     /**
      * Spezieller Retry für Location-Endpoints mit verschiedenen Parametern
+     * KORRIGIERT: Sequenziell statt parallel um Backend nicht zu überlasten
      */
     suspend fun <T> executeLocationRetry(
         categories: List<String> = listOf("urban", "landmark", "rural"),
@@ -94,23 +95,34 @@ object ApiRetryHandler {
         apiCall: suspend (category: String, difficulty: Int) -> Response<T>
     ): Response<T>? {
 
-        // Versuche verschiedene Kombinationen von Parametern
-        for (category in categories) {
-            for (difficulty in difficulties) {
+        // KORREKTUR: Mische Parameter für bessere Randomisierung
+        val shuffledCategories = categories.shuffled()
+        val shuffledDifficulties = difficulties.shuffled()
+
+        // Versuche verschiedene Kombinationen SEQUENZIELL (nicht parallel)
+        for (category in shuffledCategories) {
+            for (difficulty in shuffledDifficulties) {
                 try {
-                    val response = executeWithRetry(maxRetries = 2) {
+                    println("ApiRetryHandler: Versuche category=$category, difficulty=$difficulty")
+
+                    val response = executeWithRetry(maxRetries = 1) { // Nur 1 Retry pro Kombination
                         apiCall(category, difficulty)
                     }
 
                     if (response.isSuccessful) {
-                        println("ApiRetryHandler: Location call successful with category=$category, difficulty=$difficulty")
+                        println("ApiRetryHandler: ✅ Erfolgreich mit category=$category, difficulty=$difficulty")
                         return response
+                    } else {
+                        println("ApiRetryHandler: ❌ HTTP ${response.code()} für category=$category, difficulty=$difficulty")
                     }
 
                 } catch (e: Exception) {
-                    println("ApiRetryHandler: Location call failed for category=$category, difficulty=$difficulty: ${e.message}")
+                    println("ApiRetryHandler: ❌ Exception für category=$category, difficulty=$difficulty: ${e.message}")
                     continue
                 }
+
+                // Kleine Pause zwischen Requests um Backend zu entlasten
+                delay(100)
             }
         }
 

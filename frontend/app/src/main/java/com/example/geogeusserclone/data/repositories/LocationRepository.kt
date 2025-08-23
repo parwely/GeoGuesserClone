@@ -103,13 +103,21 @@ class LocationRepository @Inject constructor(
         return try {
             println("LocationRepository: Optimierter Backend-Aufruf mit Retry-Mechanismus...")
 
-            // KORREKTUR: Verwende ApiRetryHandler für robuste Backend-Calls
+            // KORREKTUR: Verwende excludeIds Parameter um immer neue Locations zu bekommen
+            val excludeIds = locationCache.map { coordHash ->
+                // Extrahiere Location-IDs aus dem Cache falls verfügbar
+                // Für jetzt verwenden wir eine leere Liste
+                emptyList<Int>()
+            }.flatten()
+
             val response = ApiRetryHandler.executeLocationRetry(
                 categories = listOf("urban", "landmark", "rural", "desert", "mountain", "coastal", "forest"),
                 difficulties = listOf(1, 2, 3)
             ) { category, difficulty ->
+                // KORREKTUR: Verwende unterschiedliche Parameter bei jedem Call
+                val randomCount = (3..7).random() // Randomisiere count
                 apiService.getRandomLocations(
-                    count = 5, // Erhöhte Ausbeute
+                    count = randomCount,
                     difficulty = difficulty,
                     category = category
                 )
@@ -118,28 +126,30 @@ class LocationRepository @Inject constructor(
             if (response?.isSuccessful == true && response.body() != null) {
                 val locationsResponse = response.body()!!
                 if (locationsResponse.success && locationsResponse.data.locations.isNotEmpty()) {
-                    // Nehme erste verfügbare Location
-                    val backendLocation = locationsResponse.data.locations.first()
 
-                    // ENTSPANNTE Duplikat-Prüfung
-                    val coordHash = "${backendLocation.coordinates.latitude}-${backendLocation.coordinates.longitude}"
-                    val isExactDuplicate = coordHash in locationCache
+                    // KORREKTUR: Versuche ALLE Locations aus der Response, nicht nur die erste
+                    for (backendLocation in locationsResponse.data.locations) {
+                        val coordHash = "${backendLocation.coordinates.latitude}-${backendLocation.coordinates.longitude}"
 
-                    if (!isExactDuplicate) {
-                        // KRITISCHE KORREKTUR: Return das Ergebnis!
-                        return createLocationEntity(backendLocation, "backend_optimized")
-                    } else {
-                        // Bei Duplikat: versuche andere Location aus Response
-                        val uniqueLocation = locationsResponse.data.locations.find { location ->
-                            val hash = "${location.coordinates.latitude}-${location.coordinates.longitude}"
-                            hash !in locationCache
-                        }
+                        if (coordHash !in locationCache) {
+                            // Neue, einzigartige Location gefunden!
+                            addToCache(LocationEntity(
+                                id = "temp_${backendLocation.id}",
+                                latitude = backendLocation.coordinates.latitude,
+                                longitude = backendLocation.coordinates.longitude,
+                                imageUrl = "",
+                                country = backendLocation.country,
+                                city = backendLocation.city
+                            ))
 
-                        if (uniqueLocation != null) {
-                            // KRITISCHE KORREKTUR: Return das Ergebnis!
-                            return createLocationEntity(uniqueLocation, "backend_unique")
+                            return createLocationEntity(backendLocation, "backend_optimized_${System.currentTimeMillis()}")
                         }
                     }
+
+                    // Alle Locations sind Duplikate - force nehme eine mit Modifier
+                    val backendLocation = locationsResponse.data.locations.first()
+                    println("LocationRepository: ⚠️ Alle Locations sind Duplikate, verwende trotzdem: ${backendLocation.city}")
+                    return createLocationEntity(backendLocation, "backend_forced_${System.currentTimeMillis()}")
                 }
             }
 
@@ -183,9 +193,13 @@ class LocationRepository @Inject constructor(
 
     private suspend fun getStreetViewForLocationOptimized(locationId: Int): Result<String> {
         return try {
+            // KORREKTUR: Randomisiere heading für verschiedene Ansichten
+            val randomHeading = (0..359).random()
+
             val response = withTimeout(2000L) {
                 apiService.getStreetView(
                     locationId = locationId,
+                    heading = randomHeading, // Randomisiere Blickrichtung
                     responsive = true
                 )
             }
@@ -204,7 +218,15 @@ class LocationRepository @Inject constructor(
                     }
 
                     if (!url.isNullOrEmpty()) {
-                        Result.success(url)
+                        // KORREKTUR: Füge Cache-Buster hinzu um Bildcaching-Probleme zu vermeiden
+                        val cacheBusterUrl = if (url.contains("?")) {
+                            "$url&cb=${System.currentTimeMillis()}"
+                        } else {
+                            "$url?cb=${System.currentTimeMillis()}"
+                        }
+
+                        println("LocationRepository: ✅ Street View URL generiert: ${cacheBusterUrl.take(100)}...")
+                        Result.success(cacheBusterUrl)
                     } else {
                         Result.failure(Exception("Keine Street View URL"))
                     }

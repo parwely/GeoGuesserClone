@@ -50,33 +50,50 @@ class GameViewModel @Inject constructor(
     private fun startLocationPreloading() {
         locationPreloadJob = viewModelScope.launch(Dispatchers.IO) {
             try {
-                println("GameViewModel: Starte intelligentes Location-Preloading...")
+                println("GameViewModel: Starte SEQUENZIELLE Location-Beschaffung...")
 
-                // Parallele Location-Beschaffung für garantiert 5 verschiedene Locations
-                val locationJobs = (1..8).map { // Lade 8 um sicher 5 verschiedene zu haben
-                    async {
-                        locationRepository.getRandomLocation().getOrNull()
+                // KORREKTUR: Sequenzielle statt parallele Location-Beschaffung
+                val uniqueLocations = mutableListOf<LocationEntity>()
+                val maxAttempts = 8 // Versuche maximal 8 Locations zu bekommen
+                var attempts = 0
+
+                while (uniqueLocations.size < 5 && attempts < maxAttempts) {
+                    attempts++
+
+                    val locationResult = locationRepository.getRandomLocation()
+                    locationResult.getOrNull()?.let { location ->
+                        // Prüfe auf Duplikate basierend auf Koordinaten
+                        val isDuplicate = uniqueLocations.any { existing ->
+                            val latDiff = kotlin.math.abs(existing.latitude - location.latitude)
+                            val lngDiff = kotlin.math.abs(existing.longitude - location.longitude)
+                            latDiff < 0.001 && lngDiff < 0.001 // Weniger als 100m Unterschied
+                        }
+
+                        if (!isDuplicate) {
+                            uniqueLocations.add(location)
+                            println("GameViewModel: Location ${uniqueLocations.size}: ${location.city} (${location.country})")
+                        } else {
+                            println("GameViewModel: Duplikat übersprungen: ${location.city}")
+                        }
+                    }
+
+                    // Pause zwischen Requests für Backend-Entlastung
+                    if (attempts < maxAttempts) {
+                        delay(200) // 200ms zwischen den Requests
                     }
                 }
 
-                val results = locationJobs.awaitAll().filterNotNull()
-
-                // Filtere nach eindeutigen Locations basierend auf Koordinaten
-                val uniqueLocations = results
-                    .distinctBy { "${it.latitude}-${it.longitude}" }
-                    .take(5)
-
                 if (uniqueLocations.size >= 5) {
                     gameLocations.clear()
-                    gameLocations.addAll(uniqueLocations)
-                    println("GameViewModel: ${uniqueLocations.size} eindeutige Locations preloaded")
+                    gameLocations.addAll(uniqueLocations.take(5))
+                    println("GameViewModel: ✅ ${gameLocations.size} eindeutige Locations geladen")
                 } else {
-                    // Fallback: Fülle mit generierten Locations auf
+                    // Fülle mit generierten Locations auf
                     gameLocations.clear()
                     gameLocations.addAll(uniqueLocations)
                     val missingCount = 5 - uniqueLocations.size
                     gameLocations.addAll(generateUniqueLocations(missingCount, uniqueLocations))
-                    println("GameViewModel: ${gameLocations.size} Locations preloaded (${missingCount} generiert)")
+                    println("GameViewModel: ✅ ${gameLocations.size} Locations (${uniqueLocations.size} Backend, ${missingCount} generiert)")
                 }
 
                 usedLocationIds.clear()
