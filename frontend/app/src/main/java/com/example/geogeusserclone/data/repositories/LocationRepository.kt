@@ -126,6 +126,7 @@ class LocationRepository @Inject constructor(
                     val isExactDuplicate = coordHash in locationCache
 
                     if (!isExactDuplicate) {
+                        // KRITISCHE KORREKTUR: Return das Ergebnis!
                         return createLocationEntity(backendLocation, "backend_optimized")
                     } else {
                         // Bei Duplikat: versuche andere Location aus Response
@@ -135,6 +136,7 @@ class LocationRepository @Inject constructor(
                         }
 
                         if (uniqueLocation != null) {
+                            // KRITISCHE KORREKTUR: Return das Ergebnis!
                             return createLocationEntity(uniqueLocation, "backend_unique")
                         }
                     }
