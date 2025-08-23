@@ -669,7 +669,7 @@ private fun buildStreetViewUrl(
     size: String = "1024x768"
 ): String {
     // Extract API key from Constants or use a default
-    val apiKey = "AIzaSyBSqtsyr8fijNPV-pV1qqQZUwmFAZ_S-dc" // Your actual API key
+    val apiKey = "" // Your actual API key
 
     return "https://maps.googleapis.com/maps/api/streetview?" +
             "size=$size" +
