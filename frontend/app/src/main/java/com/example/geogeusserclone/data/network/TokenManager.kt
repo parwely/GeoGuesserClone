@@ -11,7 +11,7 @@ class TokenManager @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
     private val prefs: SharedPreferences = context.getSharedPreferences(
-        "auth_prefs",
+        "auth_prefs", 
         Context.MODE_PRIVATE
     )
 
@@ -31,7 +31,7 @@ class TokenManager @Inject constructor(
     fun getToken(): String? {
         val token = prefs.getString(KEY_TOKEN, null)
         val expiry = prefs.getLong(KEY_TOKEN_EXPIRY, 0)
-
+        
         return if (token != null && System.currentTimeMillis() < expiry) {
             token
         } else {

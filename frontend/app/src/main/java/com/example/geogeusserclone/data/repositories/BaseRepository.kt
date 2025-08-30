@@ -1,7 +1,7 @@
 package com.example.geogeusserclone.data.repositories
 
 abstract class BaseRepository {
-
+    
     protected suspend fun <T> safeApiCall(
         apiCall: suspend () -> T
     ): Result<T> {
@@ -11,7 +11,7 @@ abstract class BaseRepository {
             Result.failure(e)
         }
     }
-
+    
     protected fun <T> handleApiResponse(
         response: retrofit2.Response<T>
     ): Result<T> {

@@ -48,15 +48,6 @@
             </PendingDiffInfo>
           </value>
         </entry>
-        <entry key="$PROJECT_DIR$/app/src/main/java/com/example/geogeusserclone/data/database/AppDatabase.kt">
-          <value>
-            <PendingDiffInfo>
-              <option name="filePath" value="$PROJECT_DIR$/app/src/main/java/com/example/geogeusserclone/data/database/AppDatabase.kt" />
-              <option name="originalContent" value="package com.example.geogeusserclone.data.database&#10;&#10;import androidx.room.Database&#10;import androidx.room.Room&#10;import androidx.room.RoomDatabase&#10;import com.example.geogeusserclone.data.database.dao.*&#10;import com.example.geogeusserclone.data.database.entities.*&#10;&#10;@Database(&#10;    entities = [&#10;        UserEntity::class,&#10;        LocationEntity::class,&#10;        GameEntity::class,&#10;        GuessEntity::class&#10;    ],&#10;    version = 7, // Version erhöht von 6 auf 7&#10;    exportSchema = false&#10;)&#10;abstract class AppDatabase : RoomDatabase() {&#10;&#10;    abstract fun userDao(): UserDao&#10;    abstract fun locationDao(): LocationDao&#10;    abstract fun gameDao(): GameDao&#10;    abstract fun guessDao(): GuessDao&#10;}&#10;" />
-              <option name="updatedContent" value="package com.example.geogeusserclone.data.database&#10;&#10;import androidx.room.Database&#10;import androidx.room.Room&#10;import androidx.room.RoomDatabase&#10;import com.example.geogeusserclone.data.database.dao.*&#10;import com.example.geogeusserclone.data.database.entities.*&#10;&#10;@Database(&#10;    entities = [&#10;        UserEntity::class,&#10;        LocationEntity::class,&#10;        GameEntity::class,&#10;        GuessEntity::class&#10;    ],&#10;    version = 8, // Version erhöht von 7 auf 8&#10;    exportSchema = false&#10;)&#10;abstract class AppDatabase : RoomDatabase() {&#10;&#10;    abstract fun userDao(): UserDao&#10;    abstract fun locationDao(): LocationDao&#10;    abstract fun gameDao(): GameDao&#10;    abstract fun guessDao(): GuessDao&#10;}" />
-            </PendingDiffInfo>
-          </value>
-        </entry>
         <entry key="$PROJECT_DIR$/app/src/main/java/com/example/geogeusserclone/data/database/dao/GuessDao.kt">
           <value>
             <PendingDiffInfo>

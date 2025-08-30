@@ -375,7 +375,7 @@ object DatabaseModule {
                     PRIMARY KEY(`id`)
                 )
             """)
-
+            
             database.execSQL("""
                 CREATE TABLE `guesses` (
                     `id` TEXT NOT NULL, 
