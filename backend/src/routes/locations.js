@@ -328,6 +328,80 @@ router.get("/:id/streetview", async (req, res) => {
   }
 });
 
+// Get interactive Street View with fallbacks - Public endpoint
+router.get("/:id/streetview/interactive", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { heading } = req.query;
+
+    console.log(`🌍 Interactive Street View request for location ${id}`);
+
+    const location = await locationService.getLocationById(parseInt(id));
+
+    const interactiveData =
+      await streetViewService.generateInteractiveStreetView(
+        location.coordinates.latitude,
+        location.coordinates.longitude,
+        heading ? parseInt(heading) : null
+      );
+
+    res.json({
+      success: true,
+      data: {
+        location: {
+          id: location.id,
+          name: location.name,
+          coordinates: location.coordinates,
+        },
+        interactive: interactiveData,
+      },
+    });
+  } catch (error) {
+    console.error("❌ Interactive Street View request failed:", error.message);
+    res.status(500).json({
+      error: "Failed to get interactive Street View",
+      message: "Internal server error",
+    });
+  }
+});
+
+// Check Street View availability - Public endpoint
+router.get("/:id/streetview/check", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    console.log(`🔍 Checking Street View availability for location ${id}`);
+
+    const location = await locationService.getLocationById(parseInt(id));
+
+    const availability = {
+      locationId: location.id,
+      coordinates: location.coordinates,
+      streetViewAvailable: streetViewService.isInteractiveAvailable(),
+      googleMapsAvailable: !!(
+        streetViewService.apiKey &&
+        streetViewService.apiKey !== "your_api_key_here"
+      ),
+      mapillaryAvailable: !!(
+        streetViewService.mapillaryClientId &&
+        streetViewService.mapillaryClientId !== "your_mapillary_client_id_here"
+      ),
+      staticFallbackAvailable: true,
+    };
+
+    res.json({
+      success: true,
+      data: availability,
+    });
+  } catch (error) {
+    console.error("❌ Street View availability check failed:", error.message);
+    res.status(500).json({
+      error: "Failed to check Street View availability",
+      message: "Internal server error",
+    });
+  }
+});
+
 // Get location by ID - Public endpoint (IMPORTANT: This must be LAST)
 router.get("/:id", async (req, res) => {
   try {
