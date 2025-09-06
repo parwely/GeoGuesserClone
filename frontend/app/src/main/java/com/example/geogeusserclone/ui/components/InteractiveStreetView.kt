@@ -600,33 +600,70 @@ private fun StreetViewErrorFallback(
     originalImageUrl: String,
     error: String?
 ) {
+    val context = LocalContext.current
+
+    // Smart Fallback: Versuche Unsplash-Bild basierend auf URL-Parameter
+    val fallbackImageUrl = remember(originalImageUrl) {
+        when {
+            originalImageUrl.contains("location=48.8584") ->
+                "https://images.unsplash.com/photo-1502602898536-47ad22581b52?w=800&h=600&fit=crop"
+            originalImageUrl.contains("Paris") || originalImageUrl.contains("paris") ->
+                "https://images.unsplash.com/photo-1502602898536-47ad22581b52?w=800&h=600&fit=crop"
+            originalImageUrl.contains("London") || originalImageUrl.contains("london") ->
+                "https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=800&h=600&fit=crop"
+            else ->
+                "https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=800&h=600&fit=crop"
+        }
+    }
+
     Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
+        modifier = Modifier.fillMaxSize()
     ) {
-        // Fallback to simple image if Street View fails
+        // Zeige Fallback-Bild statt Street View
         AsyncImage(
-            model = originalImageUrl,
+            model = ImageRequest.Builder(context)
+                .data(fallbackImageUrl)
+                .crossfade(300)
+                .memoryCachePolicy(coil.request.CachePolicy.ENABLED)
+                .diskCachePolicy(coil.request.CachePolicy.ENABLED)
+                .build(),
             contentDescription = "Fallback image",
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize()
         )
 
-        // Error overlay
+        // Error overlay mit hilfreicher Information
         Card(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .padding(16.dp),
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.errorContainer
+                containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.95f)
             )
         ) {
-            Text(
-                text = "Street View nicht verfügbar",
+            Column(
                 modifier = Modifier.padding(12.dp),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onErrorContainer
-            )
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Icon(
+                    Icons.Default.Place,
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp),
+                    tint = MaterialTheme.colorScheme.onSecondaryContainer
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Street View nicht verfügbar",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                )
+                Text(
+                    text = "Zeige Beispielbild der Region",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                )
+            }
         }
     }
 }

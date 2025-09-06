@@ -36,6 +36,25 @@ fun LocationImageScreen(
     // Automatisches Memory Management
     MemoryManager.AutoMemoryManagement(context)
 
+    // Smart Image URL Selection mit Fallback-Logik
+    val effectiveImageUrl = remember(location.imageUrl) {
+        when {
+            // Prüfe auf gültige Street View URL
+            location.imageUrl.contains("maps.googleapis.com") &&
+            !location.imageUrl.contains("key=-") && // Ungültige API Keys abfangen
+            location.imageUrl.contains("key=AIza") -> {
+                println("LocationImageScreen: Verwende gültige Street View URL")
+                location.imageUrl
+            }
+            // Fallback auf Unsplash basierend auf Stadt
+            else -> {
+                val fallbackUrl = getImageUrlForCity(location.city ?: "Unknown")
+                println("LocationImageScreen: Street View ungültig, verwende Fallback: $fallbackUrl")
+                fallbackUrl
+            }
+        }
+    }
+
     // Tracking der aktuellen Position für erweiterte Navigation
     var currentLatitude by remember { mutableDoubleStateOf(location.latitude) }
     var currentLongitude by remember { mutableDoubleStateOf(location.longitude) }
@@ -43,22 +62,68 @@ fun LocationImageScreen(
     Box(
         modifier = Modifier.fillMaxSize()
     ) {
-        // Vollwertige Interactive Street View mit Navigation
-        if (location.imageUrl.isNotBlank()) {
-            println("LocationImageScreen: Zeige Interactive Street View an: ${location.imageUrl}")
+        // Smart Image Display mit robustem Fallback
+        if (effectiveImageUrl.isNotBlank()) {
+            if (effectiveImageUrl.contains("maps.googleapis.com")) {
+                // Interactive Street View für gültige Google Maps URLs
+                println("LocationImageScreen: Zeige Interactive Street View an: $effectiveImageUrl")
 
-            InteractiveStreetView(
-                imageUrl = location.imageUrl,
-                modifier = Modifier.fillMaxSize(),
-                onPan = onPan,
-                onLocationChange = { lat, lng ->
-                    currentLatitude = lat
-                    currentLongitude = lng
-                    println("LocationImageScreen: Neue Position: $lat, $lng")
+                InteractiveStreetView(
+                    imageUrl = effectiveImageUrl,
+                    modifier = Modifier.fillMaxSize(),
+                    onPan = onPan,
+                    onLocationChange = { lat, lng ->
+                        currentLatitude = lat
+                        currentLongitude = lng
+                        println("LocationImageScreen: Neue Position: $lat, $lng")
+                    }
+                )
+            } else {
+                // Statisches Fallback-Bild mit verbesserter UI
+                println("LocationImageScreen: Zeige Fallback-Bild an: $effectiveImageUrl")
+
+                AsyncImage(
+                    model = ImageRequest.Builder(context)
+                        .data(effectiveImageUrl)
+                        .crossfade(300)
+                        .memoryCachePolicy(coil.request.CachePolicy.ENABLED)
+                        .diskCachePolicy(coil.request.CachePolicy.ENABLED)
+                        .build(),
+                    contentDescription = "Location: ${location.city}",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+
+                // Fallback Overlay Indicator
+                Card(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.9f)
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier.padding(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Place,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Beispielbild",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                    }
                 }
-            )
+            }
         } else {
-            // Fallback für leere URLs
+            // Emergency Fallback - keine URL verfügbar
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -76,7 +141,7 @@ fun LocationImageScreen(
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        text = "Keine Street View verfügbar",
+                        text = "Bild nicht verfügbar",
                         style = MaterialTheme.typography.titleMedium,
                         textAlign = TextAlign.Center
                     )
@@ -266,4 +331,23 @@ private fun getDifficultyText(difficulty: Int): String {
         5 -> "Sehr Schwer"
         else -> "Unbekannt"
     }
+}
+
+// Hilfsfunktion für Fallback-Bilder
+private fun getImageUrlForCity(city: String): String {
+    val imageMap = mapOf(
+        "Paris" to "https://images.unsplash.com/photo-1502602898536-47ad22581b52?w=800&h=600&fit=crop",
+        "London" to "https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=800&h=600&fit=crop",
+        "New York" to "https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=800&h=600&fit=crop",
+        "Berlin" to "https://images.unsplash.com/photo-1587330979470-3016b6702d89?w=800&h=600&fit=crop",
+        "Tokyo" to "https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=800&h=600&fit=crop",
+        "Sydney" to "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&h=600&fit=crop",
+        "Rome" to "https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=800&h=600&fit=crop",
+        "Barcelona" to "https://images.unsplash.com/photo-1539037116277-4db20889f2d4?w=800&h=600&fit=crop",
+        "Moscow" to "https://images.unsplash.com/photo-1547036967-23d11aacaee0?w=800&h=600&fit=crop",
+        "Mexico City" to "https://images.unsplash.com/photo-1512813195452-83104b651e5f?w=800&h=600&fit=crop"
+    )
+
+    return imageMap[city.split(" ").first()]
+        ?: "https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=800&h=600&fit=crop"
 }
