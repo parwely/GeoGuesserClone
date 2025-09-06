@@ -1,15 +1,20 @@
 package com.example.geogeusserclone
 
-import com.example.geogeusserclone.data.database.AppDatabase
+import com.example.geogeusserclone.data.repositories.GameRepository
+import com.example.geogeusserclone.data.repositories.LocationRepository
+import com.example.geogeusserclone.data.repositories.UserRepository
+import com.example.geogeusserclone.data.database.dao.GameDao
+import com.example.geogeusserclone.data.database.dao.GuessDao
+import com.example.geogeusserclone.data.database.dao.LocationDao
+import com.example.geogeusserclone.data.database.dao.UserDao
 import com.example.geogeusserclone.data.network.ApiService
-import com.example.geogeusserclone.data.network.AuthInterceptor
 import com.example.geogeusserclone.data.network.MapillaryApiService
-import com.example.geogeusserclone.data.repositories.*
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
+
 @Module
 @InstallIn(SingletonComponent::class)
 object RepositoryModule {
@@ -18,14 +23,9 @@ object RepositoryModule {
     @Singleton
     fun provideUserRepository(
         apiService: ApiService,
-        database: AppDatabase,
-        authInterceptor: AuthInterceptor
+        userDao: UserDao
     ): UserRepository {
-        return UserRepository(
-            apiService = apiService,
-            userDao = database.userDao(),
-            authInterceptor = authInterceptor
-        )
+        return UserRepository(apiService, userDao)
     }
 
     @Provides
@@ -33,28 +33,20 @@ object RepositoryModule {
     fun provideLocationRepository(
         apiService: ApiService,
         mapillaryApiService: MapillaryApiService,
-        database: AppDatabase
+        locationDao: LocationDao
     ): LocationRepository {
-        return LocationRepository(
-            apiService = apiService,
-            mapillaryApiService = mapillaryApiService,
-            locationDao = database.locationDao()
-        )
+        return LocationRepository(apiService, mapillaryApiService, locationDao)
     }
 
     @Provides
     @Singleton
     fun provideGameRepository(
         apiService: ApiService,
-        database: AppDatabase,
+        gameDao: GameDao,
+        guessDao: GuessDao,
+        locationDao: LocationDao,
         userRepository: UserRepository
     ): GameRepository {
-        return GameRepository(
-            apiService = apiService,
-            gameDao = database.gameDao(),
-            guessDao = database.guessDao(),
-            locationDao = database.locationDao(),
-            userRepository = userRepository
-        )
+        return GameRepository(apiService, gameDao, guessDao, locationDao, userRepository)
     }
 }

@@ -180,10 +180,30 @@ class LocationRepository @Inject constructor(
         backendLocation: com.example.geogeusserclone.data.network.BackendLocation,
         prefix: String
     ): Result<LocationEntity> {
-        // Street View Anfrage für bessere Performance
+        // KORREKTUR: Verwende Street View URL direkt aus der Backend-Response
         val streetViewUrl = try {
-            withTimeout(2000L) {
-                getStreetViewForLocationOptimized(backendLocation.id).getOrNull()
+            // Zuerst versuche die Street View API für mobile optimierte URL
+            withTimeout(1500L) {
+                val streetViewResponse = apiService.getStreetView(
+                    locationId = backendLocation.id,
+                    heading = (0..359).random(),
+                    responsive = true
+                )
+
+                if (streetViewResponse.isSuccessful && streetViewResponse.body()?.success == true) {
+                    val data = streetViewResponse.body()!!.data
+                    val urls = data.streetViewUrls
+                    when (urls) {
+                        is Map<*, *> -> {
+                            (urls["mobile"] as? String)
+                                ?: (urls["tablet"] as? String)
+                                ?: (urls["desktop"] as? String)
+                        }
+                        else -> data.streetViewUrl
+                    }
+                } else {
+                    null
+                }
             }
         } catch (e: Exception) {
             null
@@ -207,121 +227,12 @@ class LocationRepository @Inject constructor(
         return Result.success(locationEntity)
     }
 
-    private suspend fun getStreetViewForLocationOptimized(locationId: Int): Result<String> {
-        return try {
-            // KORREKTUR: Randomisiere heading für verschiedene Ansichten
-            val randomHeading = (0..359).random()
-
-            val response = withTimeout(2000L) {
-                apiService.getStreetView(
-                    locationId = locationId,
-                    heading = randomHeading, // Randomisiere Blickrichtung
-                    responsive = true
-                )
-            }
-
-            if (response.isSuccessful && response.body() != null) {
-                val streetViewResponse = response.body()!!
-                if (streetViewResponse.success) {
-                    val urlsData = streetViewResponse.data.streetViewUrls
-                    val url = when (urlsData) {
-                        is Map<*, *> -> {
-                            (urlsData["mobile"] as? String)
-                                ?: (urlsData["tablet"] as? String)
-                                ?: (urlsData["desktop"] as? String)
-                        }
-                        else -> streetViewResponse.data.streetViewUrl
-                    }
-
-                    if (!url.isNullOrEmpty()) {
-                        // KORREKTUR: Füge Cache-Buster hinzu um Bildcaching-Probleme zu vermeiden
-                        val cacheBusterUrl = if (url.contains("?")) {
-                            "$url&cb=${System.currentTimeMillis()}"
-                        } else {
-                            "$url?cb=${System.currentTimeMillis()}"
-                        }
-
-                        println("LocationRepository: ✅ Street View URL generiert: ${cacheBusterUrl.take(100)}...")
-                        Result.success(cacheBusterUrl)
-                    } else {
-                        Result.failure(Exception("Keine Street View URL"))
-                    }
-                } else {
-                    Result.failure(Exception("Street View Response fehlerhaft"))
-                }
-            } else {
-                Result.failure(Exception("Street View API Fehler: ${response.code()}"))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
     private suspend fun getLocationFromMapillaryOptimized(): Result<LocationEntity> {
         return try {
-            println("LocationRepository: Optimierte Mapillary-Suche...")
-
-            // Parallele Suche in verschiedenen Städten für bessere Ausbeute
-            val searchCities = listOf(
-                Triple(48.8566, 2.3522, "Paris"),
-                Triple(51.5074, -0.1278, "London"),
-                Triple(40.7128, -74.0060, "New York"),
-                Triple(52.5200, 13.4050, "Berlin"),
-                Triple(35.6762, 139.6503, "Tokyo")
-            )
-
-            val results = searchCities.mapNotNull { (lat, lng, cityName) ->
-                try {
-                    searchMapillaryInCity(lat, lng, cityName)
-                } catch (e: Exception) {
-                    null
-                }
-            }
-
-            val uniqueResults = results.filter { !isLocationDuplicate(it) }
-
-            if (uniqueResults.isNotEmpty()) {
-                val selectedLocation = uniqueResults.random()
-                locationDao.insertLocation(selectedLocation)
-                addToCache(selectedLocation)
-                println("LocationRepository: Mapillary Location gefunden: ${selectedLocation.city}")
-                Result.success(selectedLocation)
-            } else {
-                Result.failure(Exception("Keine einzigartigen Mapillary Locations gefunden"))
-            }
+            println("LocationRepository: Mapillary deaktiviert - API-Schlüssel fehlt")
+            Result.failure(Exception("Mapillary API nicht verfügbar"))
         } catch (e: Exception) {
             Result.failure(e)
-        }
-    }
-
-    private suspend fun searchMapillaryInCity(lat: Double, lng: Double, cityName: String): LocationEntity? {
-        return try {
-            val latOffset = 0.05
-            val lngOffset = 0.05
-            val bbox = "${lng - lngOffset},${lat - latOffset},${lng + lngOffset},${lat + latOffset}"
-
-            println("LocationRepository: Mapillary-Suche für $cityName mit bbox=$bbox")
-
-            // SICHERHEIT: Deaktiviere Mapillary bis API-Schlüssel sicher konfiguriert ist
-            // Das Hardcodieren von API-Schlüsseln ist ein Sicherheitsrisiko!
-
-            println("LocationRepository: ❌ Mapillary deaktiviert - API-Schlüssel wurde aus Sicherheitsgründen entfernt")
-            return null
-
-            /* ENTFERNT: Unsichere Mapillary API Aufrufe
-            val response = withTimeout(3000L) {
-                mapillaryApiService.getImagesNearby(
-                    bbox = bbox,
-                    isPano = true,
-                    limit = 3,
-                    accessToken = "" // LEER - Sicherheitsrisiko behoben
-                )
-            }
-            */
-
-        } catch (e: Exception) {
-            println("LocationRepository: ❌ Mapillary Exception für $cityName: ${e.message}")
-            null
         }
     }
 
@@ -392,133 +303,40 @@ class LocationRepository @Inject constructor(
     }
 
     private fun getImageUrlForCity(city: String): String {
-        return when {
-            city.contains("Paris") -> "https://images.unsplash.com/photo-1502602898536-47ad22581b52?w=800"
-            city.contains("London") -> "https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=800"
-            city.contains("New York") -> "https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=800"
-            city.contains("Berlin") -> "https://images.unsplash.com/photo-1587330979470-3016b6702d89?w=800"
-            city.contains("Tokyo") -> "https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=800"
-            city.contains("Sydney") -> "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800"
-            city.contains("Rome") -> "https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=800"
-            city.contains("Barcelona") -> "https://images.unsplash.com/photo-1539037116277-4db20889f2d4?w=800"
-            else -> "https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=800"
-        }
+        val imageMap = mapOf(
+            "Paris" to "https://images.unsplash.com/photo-1502602898536-47ad22581b52?w=800",
+            "London" to "https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=800",
+            "New York" to "https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=800",
+            "Berlin" to "https://images.unsplash.com/photo-1587330979470-3016b6702d89?w=800",
+            "Tokyo" to "https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=800",
+            "Sydney" to "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800",
+            "Rome" to "https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=800",
+            "Barcelona" to "https://images.unsplash.com/photo-1539037116277-4db20889f2d4?w=800"
+        )
+
+        return imageMap[city.split(" ").first()] ?: "https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=800"
     }
 
-    suspend fun preloadLocations() {
-        withContext(Dispatchers.IO) {
-            try {
-                println("LocationRepository: Starte intelligentes Preloading...")
-
-                // Backend- und Mapillary-Calls sequenziell für bessere Stabilität
-                val backendLocations = try {
-                    val response = withTimeout(4000L) {
-                        apiService.getRandomLocations(count = 8, difficulty = 2)
-                    }
-
-                    if (response.isSuccessful && response.body() != null) {
-                        val locationsResponse = response.body()!!
-                        if (locationsResponse.success) {
-                            val locationEntities = locationsResponse.data.locations.mapNotNull { backendLocation ->
-                                val coordHash = "${backendLocation.coordinates.latitude}-${backendLocation.coordinates.longitude}"
-                                if (coordHash !in locationCache) {
-                                    val streetViewUrl = getStreetViewForLocationOptimized(backendLocation.id).getOrNull()
-                                        ?: backendLocation.imageUrls.firstOrNull() ?: ""
-
-                                    if (streetViewUrl.isNotBlank()) {
-                                        LocationEntity(
-                                            id = "preload_backend_${backendLocation.id}",
-                                            latitude = backendLocation.coordinates.latitude,
-                                            longitude = backendLocation.coordinates.longitude,
-                                            imageUrl = streetViewUrl,
-                                            country = backendLocation.country,
-                                            city = backendLocation.city,
-                                            difficulty = backendLocation.difficulty,
-                                            isCached = true,
-                                            isUsed = false
-                                        ).also { addToCache(it) }
-                                    } else null
-                                } else null
-                            }
-                            locationEntities
-                        } else emptyList()
-                    } else emptyList()
-                } catch (e: Exception) {
-                    emptyList()
+    suspend fun preloadLocations(count: Int = 10) {
+        try {
+            repeat(count) {
+                val location = getRandomLocation()
+                location.getOrNull()?.let { locationEntity ->
+                    locationDao.insertLocation(locationEntity.copy(isCached = true))
                 }
-
-                val mapillaryLocations = try {
-                    val mapillaryLocations = mutableListOf<LocationEntity>()
-                    val cities = listOf(
-                        Triple(48.8566, 2.3522, "Paris"),
-                        Triple(51.5074, -0.1278, "London"),
-                        Triple(52.5200, 13.4050, "Berlin")
-                    )
-
-                    cities.forEach { (lat, lng, cityName) ->
-                        try {
-                            searchMapillaryInCity(lat, lng, cityName)?.let { location ->
-                                if (!isLocationDuplicate(location)) {
-                                    mapillaryLocations.add(location)
-                                    addToCache(location)
-                                }
-                            }
-                        } catch (e: Exception) {
-                            // Continue with next city
-                        }
-                    }
-                    mapillaryLocations
-                } catch (e: Exception) {
-                    emptyList()
-                }
-
-                val allLocations = (backendLocations + mapillaryLocations).take(10)
-
-                if (allLocations.isNotEmpty()) {
-                    locationDao.insertLocations(allLocations)
-                    println("LocationRepository: ${allLocations.size} Locations preloaded (${backendLocations.size} Backend, ${mapillaryLocations.size} Mapillary)")
-                } else {
-                    // Fallback: Generiere einige Locations
-                    val fallbackLocations = (1..5).map { generateUniqueLocation() }
-                    locationDao.insertLocations(fallbackLocations)
-                    println("LocationRepository: ${fallbackLocations.size} Fallback-Locations preloaded")
-                }
-
-            } catch (e: Exception) {
-                println("LocationRepository: Preload-Fehler: ${e.message}")
-                // Silent fail mit minimalen Fallback-Locations
-                try {
-                    val emergencyLocations = (1..3).map { generateUniqueLocation() }
-                    locationDao.insertLocations(emergencyLocations)
-                } catch (dbError: Exception) {
-                    // Complete silent fail
-                }
-            }
-        }
-    }
-
-    suspend fun resetLocationUsage() {
-        locationDao.resetAllLocationsUsage()
-        locationCache.clear()
-    }
-
-    suspend fun getCachedLocationCount(): Int = locationDao.getCachedLocationCount()
-
-    suspend fun testBackendConnection(): Result<Boolean> {
-        return try {
-            val response = withTimeout(2000L) {
-                apiService.getHealth()
-            }
-            if (response.isSuccessful) {
-                markBackendAvailable()
-                Result.success(true)
-            } else {
-                markBackendUnavailable()
-                Result.failure(Exception("Backend nicht erreichbar: ${response.code()}"))
+                delay(200) // Verhindere API Rate Limiting
             }
         } catch (e: Exception) {
-            markBackendUnavailable()
-            Result.failure(Exception("Netzwerkfehler: ${e.message}"))
+            println("LocationRepository: Preload-Fehler: ${e.message}")
+        }
+    }
+
+    suspend fun clearUnusedLocations() {
+        try {
+            locationDao.deleteUnusedOldLocations()
+            locationCache.clear()
+        } catch (e: Exception) {
+            println("LocationRepository: Cache-Bereinigung fehlgeschlagen: ${e.message}")
         }
     }
 }
