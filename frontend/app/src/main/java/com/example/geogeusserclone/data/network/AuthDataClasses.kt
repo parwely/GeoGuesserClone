@@ -5,7 +5,7 @@ import kotlinx.serialization.Serializable
 // Authentication Request Classes
 @Serializable
 data class LoginRequest(
-    val email: String,
+    val usernameOrEmail: String,
     val password: String
 )
 
@@ -18,44 +18,134 @@ data class RegisterRequest(
 
 // Authentication Response Classes
 @Serializable
-data class LoginResponse(
+data class AuthResponse(
     val success: Boolean,
-    val message: String? = null,
-    val data: LoginData
+    val data: AuthData
 )
 
 @Serializable
-data class RegisterResponse(
-    val success: Boolean,
-    val message: String? = null,
-    val data: RegisterData
+data class AuthData(
+    val user: BackendUser,
+    val token: String,
+    val expiresIn: String = "7d"
 )
 
 @Serializable
-data class LoginData(
-    val user: UserResponse,
-    val token: String
-)
-
-@Serializable
-data class RegisterData(
-    val user: UserResponse,
-    val token: String
-)
-
-@Serializable
-data class UserResponse(
+data class BackendUser(
     val id: Int,
     val username: String,
     val email: String,
-    val totalScore: Int? = null,
-    val gamesPlayed: Int? = null,
-    val bestScore: Int? = null
+    val totalScore: Int = 0,
+    val gamesPlayed: Int = 0,
+    val bestScore: Int = 0
 )
 
-// Game Request Classes
+@Serializable
+data class TokenResponse(
+    val success: Boolean,
+    val data: TokenData
+)
+
+@Serializable
+data class TokenData(
+    val token: String,
+    val expiresIn: String
+)
+
+@Serializable
+data class MessageResponse(
+    val success: Boolean,
+    val message: String
+)
+
+// Location Models
+@Serializable
+data class LocationsResponse(
+    val success: Boolean,
+    val data: LocationsData
+)
+
+@Serializable
+data class LocationsData(
+    val count: Int,
+    val locations: List<BackendLocation>
+)
+
+@Serializable
+data class LocationResponse(
+    val success: Boolean,
+    val data: LocationDetailData
+)
+
+@Serializable
+data class LocationDetailData(
+    val location: BackendLocation
+)
+
+@Serializable
+data class BackendLocation(
+    val id: Int,
+    val name: String? = null,
+    val country: String,
+    val city: String,
+    val coordinates: Coordinates,
+    val difficulty: Int,
+    val difficultyName: String,
+    val category: String,
+    val imageUrls: List<String> = emptyList(),
+    val hints: Map<String, String> = emptyMap(), // Changed from Any to String
+    val viewCount: Int = 0
+)
+
+@Serializable
+data class Coordinates(
+    val latitude: Double,
+    val longitude: Double
+)
+
+@Serializable
+data class StreetViewResponse(
+    val success: Boolean,
+    val data: StreetViewData
+)
+
+@Serializable
+data class StreetViewData(
+    val location: StreetViewLocation,
+    val streetViewUrl: String? = null,
+    val streetViewUrls: Map<String, String>? = null // Fixed: Changed from Any to Map<String, String>
+)
+
+@Serializable
+data class StreetViewLocation(
+    val id: Int,
+    val coordinates: Coordinates
+)
+
+// Game Models
 @Serializable
 data class GameCreateRequest(
+    val difficulty: Int = 2,
+    val category: String = "urban",
+    val rounds: Int = 5
+)
+
+@Serializable
+data class GameCreateResponse(
+    val success: Boolean,
+    val data: GameCreateData
+)
+
+@Serializable
+data class GameCreateData(
+    val gameId: Int,
+    val locations: List<BackendLocation>,
+    val settings: GameSettings,
+    val createdAt: String
+)
+
+@Serializable
+data class GameSettings(
     val difficulty: Int,
     val category: String,
     val rounds: Int
@@ -82,73 +172,44 @@ data class RoundData(
     val timeSpent: Long
 )
 
-// Game Response Classes
-@Serializable
-data class GameCreateResponse(
-    val success: Boolean,
-    val message: String? = null,
-    val data: GameData
-)
-
 @Serializable
 data class GameResultResponse(
     val success: Boolean,
-    val message: String? = null,
     val data: GameResultData? = null
 )
 
 @Serializable
-data class GameData(
-    val gameId: Int,
-    val locations: List<BackendLocation>
-)
-
-@Serializable
 data class GameResultData(
-    val rank: Int? = null,
-    val percentile: Double? = null
+    val resultId: Int,
+    val gameId: Int,
+    val totalScore: Int,
+    val submittedAt: String
 )
 
-// Location Classes
+// Stats Models
 @Serializable
-data class LocationsResponse(
+data class StatsResponse(
     val success: Boolean,
-    val message: String? = null,
-    val data: LocationsData
+    val data: StatsData
 )
 
 @Serializable
-data class LocationsData(
-    val count: Int,
-    val locations: List<BackendLocation>
+data class StatsData(
+    val stats: LocationStats
 )
 
 @Serializable
-data class BackendLocation(
-    val id: Int,
-    val coordinates: Coordinates,
-    val country: String,
-    val city: String,
-    val difficulty: Int = 2,
-    val imageUrls: List<String> = emptyList()
+data class LocationStats(
+    val total: Int,
+    val difficulties: Map<String, Int>,
+    val categories: Map<String, Int>
 )
 
+// Health Models
 @Serializable
-data class Coordinates(
-    val latitude: Double,
-    val longitude: Double
-)
-
-// Street View Classes
-@Serializable
-data class StreetViewResponse(
-    val success: Boolean,
-    val message: String? = null,
-    val data: StreetViewData
-)
-
-@Serializable
-data class StreetViewData(
-    val streetViewUrl: String? = null,
-    val streetViewUrls: Any? = null // Can be String or Map<String, String>
+data class HealthResponse(
+    val status: String,
+    val timestamp: String,
+    val uptime: Long,
+    val database: String
 )

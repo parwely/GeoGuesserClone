@@ -193,14 +193,10 @@ class LocationRepository @Inject constructor(
                 if (streetViewResponse.isSuccessful && streetViewResponse.body()?.success == true) {
                     val data = streetViewResponse.body()!!.data
                     val urls = data.streetViewUrls
-                    when (urls) {
-                        is Map<*, *> -> {
-                            (urls["mobile"] as? String)
-                                ?: (urls["tablet"] as? String)
-                                ?: (urls["desktop"] as? String)
-                        }
-                        else -> data.streetViewUrl
-                    }
+                    urls?.get("mobile")
+                        ?: urls?.get("tablet")
+                        ?: urls?.get("desktop")
+                        ?: data.streetViewUrl
                 } else {
                     null
                 }

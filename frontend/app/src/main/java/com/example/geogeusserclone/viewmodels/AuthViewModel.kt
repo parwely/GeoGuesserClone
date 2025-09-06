@@ -54,7 +54,7 @@ class AuthViewModel @Inject constructor(
             _state.value = _state.value.copy(isLoading = true, error = null)
 
             try {
-                val result = userRepository.login(email, password)
+                val result = userRepository.loginUser(email, password)
 
                 if (result.isSuccess) {
                     val user = result.getOrNull()!!
@@ -84,7 +84,7 @@ class AuthViewModel @Inject constructor(
             _state.value = _state.value.copy(isLoading = true, error = null)
 
             try {
-                val result = userRepository.register(username, email, password)
+                val result = userRepository.registerUser(username, email, password)
 
                 if (result.isSuccess) {
                     val user = result.getOrNull()!!

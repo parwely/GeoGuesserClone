@@ -70,14 +70,6 @@
             </PendingDiffInfo>
           </value>
         </entry>
-        <entry key="$PROJECT_DIR$/app/src/main/java/com/example/geogeusserclone/data/repositories/BaseRepository.kt">
-          <value>
-            <PendingDiffInfo>
-              <option name="filePath" value="$PROJECT_DIR$/app/src/main/java/com/example/geogeusserclone/data/repositories/BaseRepository.kt" />
-              <option name="updatedContent" value="package com.example.geogeusserclone.data.repositories&#10;&#10;abstract class BaseRepository {&#10;    &#10;    protected suspend fun &lt;T&gt; safeApiCall(&#10;        apiCall: suspend () -&gt; T&#10;    ): Result&lt;T&gt; {&#10;        return try {&#10;            Result.success(apiCall())&#10;        } catch (e: Exception) {&#10;            Result.failure(e)&#10;        }&#10;    }&#10;    &#10;    protected fun &lt;T&gt; handleApiResponse(&#10;        response: retrofit2.Response&lt;T&gt;&#10;    ): Result&lt;T&gt; {&#10;        return if (response.isSuccessful &amp;&amp; response.body() != null) {&#10;            Result.success(response.body()!!)&#10;        } else {&#10;            Result.failure(Exception(&quot;API Error: ${response.code()} ${response.message()}&quot;))&#10;        }&#10;    }&#10;}" />
-            </PendingDiffInfo>
-          </value>
-        </entry>
         <entry key="$PROJECT_DIR$/app/src/main/java/com/example/geogeusserclone/data/repositories/LocationCacheRepository.kt">
           <value>
             <PendingDiffInfo>

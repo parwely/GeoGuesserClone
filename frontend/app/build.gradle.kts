@@ -8,7 +8,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.geoguessrclone"
+    namespace = "com.example.geogeusserclone"
     compileSdk = 35
 
     defaultConfig {
