@@ -38,12 +38,12 @@ fun LocationImageScreen(
 
     // Smart Image URL Selection mit Fallback-Logik
     val effectiveImageUrl = remember(location.imageUrl) {
-        when {
+        val url = when {
             // Prüfe auf gültige Street View URL
             location.imageUrl.contains("maps.googleapis.com") &&
             !location.imageUrl.contains("key=-") && // Ungültige API Keys abfangen
             location.imageUrl.contains("key=AIza") -> {
-                println("LocationImageScreen: Verwende gültige Street View URL")
+                println("LocationImageScreen: Verwende gültige Street View URL: ${location.imageUrl}")
                 location.imageUrl
             }
             // Fallback auf Unsplash basierend auf Stadt
@@ -53,6 +53,8 @@ fun LocationImageScreen(
                 fallbackUrl
             }
         }
+        println("LocationImageScreen: Effektive Image URL: $url")
+        url
     }
 
     // Tracking der aktuellen Position für erweiterte Navigation

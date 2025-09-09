@@ -193,17 +193,23 @@ class LocationRepository @Inject constructor(
                 if (streetViewResponse.isSuccessful && streetViewResponse.body()?.success == true) {
                     val data = streetViewResponse.body()!!.data
                     val urls = data.streetViewUrls
-                    urls?.get("mobile")
+                    val url = urls?.get("mobile")
                         ?: urls?.get("tablet")
                         ?: urls?.get("desktop")
                         ?: data.streetViewUrl
+                    println("LocationRepository: StreetView API URL: $url")
+                    url
                 } else {
+                    println("LocationRepository: StreetView API fehlgeschlagen, nutze imageUrls")
                     null
                 }
             }
         } catch (e: Exception) {
+            println("LocationRepository: StreetView API Exception: ${e.message}")
             null
-        } ?: backendLocation.imageUrls.firstOrNull() ?: ""
+        } ?: backendLocation.imageUrls.firstOrNull().also {
+            println("LocationRepository: Fallback imageUrl: $it")
+        } ?: ""
 
         val locationEntity = LocationEntity(
             id = "${prefix}_${backendLocation.id}_${System.currentTimeMillis()}",
@@ -217,6 +223,7 @@ class LocationRepository @Inject constructor(
             isUsed = false
         )
 
+        println("LocationRepository: Final LocationEntity imageUrl: ${locationEntity.imageUrl}")
         locationDao.insertLocation(locationEntity)
         addToCache(locationEntity)
         println("LocationRepository: ✅ Backend-Location erfolgreich erstellt: ${locationEntity.city}")

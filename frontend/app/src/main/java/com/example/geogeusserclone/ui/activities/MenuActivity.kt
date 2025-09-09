@@ -12,6 +12,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Group
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -168,6 +169,30 @@ fun MenuScreen(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         "Neues Spiel starten",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+            }
+
+            // Multiplayer Button
+            item {
+                Button(
+                    onClick = {
+                        // Starte Multiplayer-Lobby
+                        val context = LocalContext.current
+                        context.startActivity(android.content.Intent(context, com.example.geogeusserclone.ui.activities.SessionLobbyActivity::class.java))
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(60.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.secondary
+                    )
+                ) {
+                    Icon(Icons.Default.Group, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        "Multiplayer / Battle Royale",
                         style = MaterialTheme.typography.titleMedium
                     )
                 }
