@@ -303,11 +303,19 @@ router.get("/:id/streetview", async (req, res) => {
         location.coordinates.longitude,
         heading ? parseInt(heading) : null
       );
+      console.log(
+        `StreetView responsive URLs for location ${id}:`,
+        response.data.streetViewUrls
+      );
     } else if (multiple === "true") {
       // Generate multiple view angles
       response.data.streetViewUrls = streetViewService.generateViewAngles(
         location.coordinates.latitude,
         location.coordinates.longitude
+      );
+      console.log(
+        `StreetView multiple URLs for location ${id}:`,
+        response.data.streetViewUrls
       );
     } else {
       // Single Street View URL
@@ -315,6 +323,10 @@ router.get("/:id/streetview", async (req, res) => {
         location.coordinates.latitude,
         location.coordinates.longitude,
         heading ? parseInt(heading) : null
+      );
+      console.log(
+        `StreetView URL for location ${id}:`,
+        response.data.streetViewUrl
       );
     }
 
