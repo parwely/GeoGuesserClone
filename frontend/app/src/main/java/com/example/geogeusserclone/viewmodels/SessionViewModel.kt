@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.geogeusserclone.data.repositories.SessionRepository
 import com.example.geogeusserclone.data.repositories.SessionState
+import com.example.geogeusserclone.data.network.PlayerInfo
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -38,7 +39,7 @@ class SessionViewModel @Inject constructor(
             // Spieler hinzufügen
             val userId = json.optJSONObject("player")?.optString("userId") ?: ""
             val username = json.optJSONObject("player")?.optString("username") ?: ""
-            val newPlayer = com.example.geogeusserclone.data.repositories.PlayerInfo(userId, username)
+            val newPlayer = PlayerInfo(userId, username)
             _state.value = _state.value.copy(players = _state.value.players + newPlayer)
         }
         sessionRepository.onEvent("player-left") { json ->
@@ -54,7 +55,7 @@ class SessionViewModel @Inject constructor(
         sessionRepository.disconnectSocket()
     }
 
-    fun createSession(mode: String, settings: Map<String, Any>) {
+    fun createSession(mode: String, settings: Map<String, String>) {
         viewModelScope.launch {
             val result = sessionRepository.createSession(mode, settings)
             result.fold(
@@ -90,4 +91,3 @@ class SessionViewModel @Inject constructor(
         _error.value = null
     }
 }
-

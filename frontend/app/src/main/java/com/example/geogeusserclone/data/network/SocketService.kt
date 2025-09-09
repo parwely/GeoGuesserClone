@@ -4,10 +4,11 @@ import android.util.Log
 import io.socket.client.IO
 import io.socket.client.Socket
 import org.json.JSONObject
+import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class SocketService {
+class SocketService @Inject constructor() {
     private var socket: Socket? = null
 
     fun connect(jwt: String, onConnected: (() -> Unit)? = null, onError: ((String) -> Unit)? = null) {

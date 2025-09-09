@@ -32,13 +32,13 @@ data class LocationDistancePoint(
 @Serializable
 data class SessionCreateRequest(
     val mode: String,
-    val settings: Map<String, Any>
+    val settings: Map<String, String>
 )
 
 @Serializable
 data class SessionCreateResponse(
     val sessionId: String,
-    val settings: Map<String, Any>
+    val settings: Map<String, String>
 )
 
 @Serializable
@@ -57,7 +57,7 @@ data class SessionInfoResponse(
     val sessionId: String,
     val players: List<PlayerInfo>,
     val status: String,
-    val settings: Map<String, Any>
+    val settings: Map<String, String>
 )
 
 @Serializable
@@ -65,4 +65,3 @@ data class PlayerInfo(
     val userId: String,
     val username: String
 )
-

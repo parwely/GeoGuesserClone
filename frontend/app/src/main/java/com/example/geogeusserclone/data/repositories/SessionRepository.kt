@@ -2,9 +2,14 @@ package com.example.geogeusserclone.data.repositories
 
 import com.example.geogeusserclone.data.network.ApiService
 import com.example.geogeusserclone.data.network.SocketService
+import com.example.geogeusserclone.data.network.SessionCreateRequest
+import com.example.geogeusserclone.data.network.SessionCreateResponse
+import com.example.geogeusserclone.data.network.SessionJoinRequest
+import com.example.geogeusserclone.data.network.SessionJoinResponse
+import com.example.geogeusserclone.data.network.SessionInfoResponse
+import com.example.geogeusserclone.data.network.PlayerInfo
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import org.json.JSONObject
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -28,7 +33,7 @@ class SessionRepository @Inject constructor(
     }
 
     fun emitSubmitGuess(lat: Double, lng: Double, roundNumber: Int) {
-        val payload = JSONObject().apply {
+        val payload = org.json.JSONObject().apply {
             put("lat", lat)
             put("lng", lng)
             put("roundNumber", roundNumber)
@@ -36,12 +41,12 @@ class SessionRepository @Inject constructor(
         socketService.emit("submit-guess", payload)
     }
 
-    fun onEvent(event: String, handler: (JSONObject) -> Unit) {
+    fun onEvent(event: String, handler: (org.json.JSONObject) -> Unit) {
         socketService.on(event, handler)
     }
 
     // REST API Methoden
-    suspend fun createSession(mode: String, settings: Map<String, Any>): Result<SessionCreateResponse> {
+    suspend fun createSession(mode: String, settings: Map<String, String>): Result<SessionCreateResponse> {
         val request = SessionCreateRequest(mode, settings)
         val response = apiService.createSession(request)
         return if (response.isSuccessful && response.body() != null) {
@@ -71,43 +76,10 @@ class SessionRepository @Inject constructor(
     }
 }
 
-// Datenklassen für Session-API
-
+// Datenklasse für Session-State (nur für UI, KEINE Netzwerkmodelle duplizieren)
 data class SessionState(
     val sessionId: String = "",
     val players: List<PlayerInfo> = emptyList(),
     val status: String = "waiting",
-    val settings: Map<String, Any> = emptyMap()
+    val settings: Map<String, String> = emptyMap()
 )
-
-data class PlayerInfo(
-    val userId: String,
-    val username: String
-)
-
-data class SessionCreateRequest(
-    val mode: String,
-    val settings: Map<String, Any>
-)
-
-data class SessionCreateResponse(
-    val sessionId: String,
-    val settings: Map<String, Any>
-)
-
-data class SessionJoinRequest(
-    val sessionId: String
-)
-
-data class SessionJoinResponse(
-    val sessionId: String,
-    val players: List<PlayerInfo>
-)
-
-data class SessionInfoResponse(
-    val sessionId: String,
-    val players: List<PlayerInfo>,
-    val status: String,
-    val settings: Map<String, Any>
-)
-
