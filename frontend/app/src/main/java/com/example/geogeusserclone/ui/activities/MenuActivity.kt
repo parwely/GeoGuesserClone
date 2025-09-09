@@ -9,10 +9,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -180,7 +179,7 @@ fun MenuScreen(
                     onClick = {
                         // Starte Multiplayer-Lobby
                         val context = LocalContext.current
-                        context.startActivity(android.content.Intent(context, com.example.geogeusserclone.ui.activities.SessionLobbyActivity::class.java))
+                        context.startActivity(Intent(context, SessionLobbyActivity::class.java))
                     },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -189,7 +188,7 @@ fun MenuScreen(
                         containerColor = MaterialTheme.colorScheme.secondary
                     )
                 ) {
-                    Icon(Icons.Default.Group, contentDescription = null)
+                    Icon(Icons.Default.Person, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         "Multiplayer / Battle Royale",
