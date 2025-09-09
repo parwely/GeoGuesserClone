@@ -46,6 +46,54 @@ interface ApiService {
     @GET("locations/stats/overview")
     suspend fun getLocationStats(): Response<StatsResponse>
 
+    // Location Endpoints (Erweiterungen)
+    @GET("locations/difficulty/{difficulty}")
+    suspend fun getLocationsByDifficulty(
+        @Path("difficulty") difficulty: Int,
+        @Query("limit") limit: Int = 10
+    ): Response<LocationsResponse>
+
+    @GET("locations/category/{category}")
+    suspend fun getLocationsByCategory(
+        @Path("category") category: String,
+        @Query("limit") limit: Int = 10
+    ): Response<LocationsResponse>
+
+    @GET("locations/near/{lat}/{lng}")
+    suspend fun getLocationsNear(
+        @Path("lat") lat: Double,
+        @Path("lng") lng: Double,
+        @Query("radius") radius: Int = 100,
+        @Query("limit") limit: Int = 10
+    ): Response<LocationsResponse>
+
+    @GET("locations/{id}/streetview/check")
+    suspend fun checkStreetViewAvailability(
+        @Path("id") locationId: Int
+    ): Response<StreetViewAvailabilityResponse>
+
+    @GET("locations/distance/{id1}/{id2}")
+    suspend fun getDistanceBetweenLocations(
+        @Path("id1") id1: Int,
+        @Path("id2") id2: Int
+    ): Response<LocationDistanceResponse>
+
+    // Session Endpoints
+    @POST("session")
+    suspend fun createSession(
+        @Body request: SessionCreateRequest
+    ): Response<SessionCreateResponse>
+
+    @POST("session/join")
+    suspend fun joinSession(
+        @Body request: SessionJoinRequest
+    ): Response<SessionJoinResponse>
+
+    @GET("session/{sessionId}")
+    suspend fun getSessionInfo(
+        @Path("sessionId") sessionId: String
+    ): Response<SessionInfoResponse>
+
     // Game Endpoints
     @POST("games/single")
     suspend fun createSinglePlayerGame(

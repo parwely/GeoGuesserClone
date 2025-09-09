@@ -335,4 +335,109 @@ class LocationRepository @Inject constructor(
             println("LocationRepository: Cache-Bereinigung fehlgeschlagen: ${e.message}")
         }
     }
+
+    // Wrapper für neue Location-API-Endpunkte
+    suspend fun getLocationsByDifficulty(difficulty: Int, limit: Int = 10): Result<List<LocationEntity>> {
+        return try {
+            val response = apiService.getLocationsByDifficulty(difficulty, limit)
+            if (response.isSuccessful && response.body()?.data?.locations != null) {
+                val locations = response.body()!!.data.locations.map { backendLocation ->
+                    LocationEntity(
+                        id = backendLocation.id.toString(),
+                        latitude = backendLocation.coordinates.latitude,
+                        longitude = backendLocation.coordinates.longitude,
+                        imageUrl = backendLocation.imageUrls.firstOrNull() ?: "",
+                        country = backendLocation.country,
+                        city = backendLocation.city,
+                        difficulty = backendLocation.difficulty,
+                        isCached = true,
+                        isUsed = false
+                    )
+                }
+                Result.success(locations)
+            } else {
+                Result.failure(Exception("Fehler beim Laden der Locations nach Schwierigkeit"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getLocationsByCategory(category: String, limit: Int = 10): Result<List<LocationEntity>> {
+        return try {
+            val response = apiService.getLocationsByCategory(category, limit)
+            if (response.isSuccessful && response.body()?.data?.locations != null) {
+                val locations = response.body()!!.data.locations.map { backendLocation ->
+                    LocationEntity(
+                        id = backendLocation.id.toString(),
+                        latitude = backendLocation.coordinates.latitude,
+                        longitude = backendLocation.coordinates.longitude,
+                        imageUrl = backendLocation.imageUrls.firstOrNull() ?: "",
+                        country = backendLocation.country,
+                        city = backendLocation.city,
+                        difficulty = backendLocation.difficulty,
+                        isCached = true,
+                        isUsed = false
+                    )
+                }
+                Result.success(locations)
+            } else {
+                Result.failure(Exception("Fehler beim Laden der Locations nach Kategorie"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getLocationsNear(lat: Double, lng: Double, radius: Int = 100, limit: Int = 10): Result<List<LocationEntity>> {
+        return try {
+            val response = apiService.getLocationsNear(lat, lng, radius, limit)
+            if (response.isSuccessful && response.body()?.data?.locations != null) {
+                val locations = response.body()!!.data.locations.map { backendLocation ->
+                    LocationEntity(
+                        id = backendLocation.id.toString(),
+                        latitude = backendLocation.coordinates.latitude,
+                        longitude = backendLocation.coordinates.longitude,
+                        imageUrl = backendLocation.imageUrls.firstOrNull() ?: "",
+                        country = backendLocation.country,
+                        city = backendLocation.city,
+                        difficulty = backendLocation.difficulty,
+                        isCached = true,
+                        isUsed = false
+                    )
+                }
+                Result.success(locations)
+            } else {
+                Result.failure(Exception("Fehler beim Laden der Locations in der Nähe"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun checkStreetViewAvailability(locationId: Int): Result<Boolean> {
+        return try {
+            val response = apiService.checkStreetViewAvailability(locationId)
+            if (response.isSuccessful && response.body() != null) {
+                Result.success(response.body()!!.streetViewAvailable)
+            } else {
+                Result.failure(Exception("Fehler beim Prüfen der Street View Verfügbarkeit"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getDistanceBetweenLocations(id1: Int, id2: Int): Result<Double> {
+        return try {
+            val response = apiService.getDistanceBetweenLocations(id1, id2)
+            if (response.isSuccessful && response.body()?.distance != null) {
+                Result.success(response.body()!!.distance.distanceKm)
+            } else {
+                Result.failure(Exception("Fehler beim Berechnen der Distanz"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }

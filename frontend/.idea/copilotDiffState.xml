@@ -37,14 +37,6 @@
             </PendingDiffInfo>
           </value>
         </entry>
-        <entry key="$PROJECT_DIR$/app/src/main/java/com/example/geogeusserclone/data/models/GameState.kt">
-          <value>
-            <PendingDiffInfo>
-              <option name="filePath" value="$PROJECT_DIR$/app/src/main/java/com/example/geogeusserclone/data/models/GameState.kt" />
-              <option name="updatedContent" value="package com.example.geogeusserclone.data.models&#10;&#10;data class GameState(&#10;    val currentGame: com.example.geogeusserclone.data.database.entities.GameEntity? = null,&#10;    val currentLocation: com.example.geogeusserclone.data.database.entities.LocationEntity? = null,&#10;    val isLoading: Boolean = false,&#10;    val error: String? = null,&#10;    val showMap: Boolean = false,&#10;    val showRoundResult: Boolean = false,&#10;    val showGameCompletion: Boolean = false,&#10;    val revealGuessResult: com.example.geogeusserclone.data.database.entities.GuessEntity? = null,&#10;    val timeRemaining: Long = 120000L, // 2 Minuten default&#10;    val currentRound: Int = 1,&#10;    val totalRounds: Int = 5,&#10;    val gameScore: Int = 0&#10;)" />
-            </PendingDiffInfo>
-          </value>
-        </entry>
         <entry key="$PROJECT_DIR$/app/src/main/java/com/example/geogeusserclone/data/network/LocationResponse.kt">
           <value>
             <PendingDiffInfo>
