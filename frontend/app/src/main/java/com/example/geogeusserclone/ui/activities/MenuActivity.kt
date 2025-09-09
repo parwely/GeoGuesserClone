@@ -16,6 +16,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -52,6 +53,7 @@ fun MenuScreen(
     authViewModel: AuthViewModel = hiltViewModel()
 ) {
     val authState by authViewModel.state.collectAsState()
+    val context = LocalContext.current // <-- Context im Composable holen
 
     Scaffold(
         topBar = {
@@ -178,7 +180,6 @@ fun MenuScreen(
                 Button(
                     onClick = {
                         // Starte Multiplayer-Lobby
-                        val context = LocalContext.current
                         context.startActivity(Intent(context, SessionLobbyActivity::class.java))
                     },
                     modifier = Modifier
