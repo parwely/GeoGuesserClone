@@ -4,6 +4,52 @@ const { authenticateToken } = require("../middleware/authMiddleware");
 const battleRoyaleManager = require("../services/battleRoyaleService");
 const socketService = require("../services/socketService");
 
+// Battle Royale service information - Root endpoint
+router.get("/", async (req, res) => {
+  try {
+    console.log("🎮 Battle Royale service info requested");
+
+    const stats = battleRoyaleManager.getStats();
+    const socketStats = socketService.getStats();
+
+    res.json({
+      success: true,
+      message: "Battle Royale service is active",
+      version: "1.0.0",
+      data: {
+        service: "Battle Royale",
+        status: "active",
+        features: [
+          "Real-time multiplayer battles",
+          "Session-based gameplay",
+          "Elimination rounds",
+          "Live leaderboards",
+        ],
+        endpoints: {
+          stats: "/api/battle-royale/stats",
+          create: "/api/battle-royale/create",
+          session: "/api/battle-royale/session/:code",
+          leaderboard: "/api/battle-royale/session/:code/leaderboard",
+          start: "/api/battle-royale/session/:code/start",
+          health: "/api/battle-royale/health",
+        },
+        currentStats: {
+          activeSessions: stats.activeSessions,
+          totalPlayers: stats.totalPlayers,
+          connectedUsers: socketStats.connectedUsers,
+        },
+        timestamp: new Date(),
+      },
+    });
+  } catch (error) {
+    console.error("❌ Battle Royale service info failed:", error.message);
+    res.status(500).json({
+      error: "Failed to get service information",
+      message: "Internal server error",
+    });
+  }
+});
+
 // Get battle royale statistics - Public endpoint
 router.get("/stats", async (req, res) => {
   try {
