@@ -50,7 +50,3 @@
 - **Image Loading**: Glide
 - **Charts & Statistics**: MPAndroidChart
 - **Maps**: OSMDroid oder WebView mit Leaflet
-
-## Machine Learning (Optional)
-- **TensorFlow Lite**: Offline Objekterkennung
-- **ML Kit**: Text/Landmark Recognition
