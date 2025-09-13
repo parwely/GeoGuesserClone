@@ -18,11 +18,13 @@ Added intelligent mobile fallback logic to `streetViewService.js`:
 ### **2. Updated API Endpoints**
 
 #### **Enhanced `/api/locations/:id/streetview` endpoint**
+
 - Added `preferHighQuality` query parameter
 - Automatically detects mobile user agents
 - Applies fallback logic based on location coordinates
 
 #### **New `/api/locations/:id/streetview/reliable` endpoint**
+
 - **Purpose**: Always returns the most reliable Street View URLs
 - **Auto-detection**: Automatically applies best quality for mobile devices
 - **Response includes reliability metadata**:
@@ -42,8 +44,9 @@ Added intelligent mobile fallback logic to `streetViewService.js`:
 Mobile URLs are automatically upgraded to tablet quality when:
 
 1. **Mobile User Agent** detected AND **Problematic Geographic Region**:
+
    - Antarctica/Arctic regions
-   - Sahara/Arabian deserts  
+   - Sahara/Arabian deserts
    - Australian outback
    - Himalayas/Andes mountains
 
@@ -57,12 +60,16 @@ Mobile URLs are automatically upgraded to tablet quality when:
 
 ```javascript
 // Option 1: Use reliable endpoint (recommended)
-const response = await fetch('/api/locations/123/streetview/reliable?heading=90');
+const response = await fetch(
+  "/api/locations/123/streetview/reliable?heading=90"
+);
 const data = await response.json();
 const bestUrl = data.reliability.recommendedUrl;
 
 // Option 2: Use regular endpoint with high quality preference
-const response = await fetch('/api/locations/123/streetview?responsive=true&preferHighQuality=true');
+const response = await fetch(
+  "/api/locations/123/streetview?responsive=true&preferHighQuality=true"
+);
 const urls = response.data.streetViewUrls;
 const mobileUrl = urls.mobile; // Will be tablet quality if fallback applied
 ```
@@ -70,6 +77,7 @@ const mobileUrl = urls.mobile; // Will be tablet quality if fallback applied
 ### **Backend Response Examples**
 
 **Mobile device in problematic location:**
+
 ```json
 {
   "data": {
@@ -84,6 +92,7 @@ const mobileUrl = urls.mobile; // Will be tablet quality if fallback applied
 ```
 
 **Desktop or good location:**
+
 ```json
 {
   "data": {
