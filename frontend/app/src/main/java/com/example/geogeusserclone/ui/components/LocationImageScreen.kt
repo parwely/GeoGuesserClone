@@ -23,6 +23,7 @@ import coil.compose.rememberAsyncImagePainter
 import coil.request.ImageRequest
 import com.example.geogeusserclone.data.database.entities.LocationEntity
 import com.example.geogeusserclone.utils.MemoryManager
+import java.util.Locale
 
 @Composable
 fun LocationImageScreen(
@@ -40,7 +41,7 @@ fun LocationImageScreen(
     val isValidStreetViewUrl = remember(location.imageUrl) {
         // Accept any Google Maps Street View URL with a key
         location.imageUrl.startsWith("https://maps.googleapis.com/maps/api/streetview") &&
-        Regex("key=AIza[\w-]+", RegexOption.IGNORE_CASE).containsMatchIn(location.imageUrl)
+        Regex("key=AIza[\\w-]+", RegexOption.IGNORE_CASE).containsMatchIn(location.imageUrl)
     }
     val effectiveImageUrl = location.imageUrl
 
@@ -204,7 +205,7 @@ fun LocationImageScreen(
                 }
                 // Zeige aktuelle Koordinaten (hilfreich für Navigation)
                 Text(
-                    text = "Pos: ${String.format("%.4f", currentLatitude)}, ${String.format("%.4f", currentLongitude)}",
+                    text = "Pos: ${String.format(Locale.US, "%.4f", currentLatitude)}, ${String.format(Locale.US, "%.4f", currentLongitude)}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.outline
                 )
@@ -296,7 +297,7 @@ private fun formatTime(milliseconds: Long): String {
     val totalSeconds = milliseconds / 1000
     val minutes = totalSeconds / 60
     val seconds = totalSeconds % 60
-    return String.format("%d:%02d", minutes, seconds)
+    return String.format(Locale.US, "%d:%02d", minutes, seconds)
 }
 
 private fun getDifficultyColor(difficulty: Int): Color {
