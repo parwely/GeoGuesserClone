@@ -180,9 +180,8 @@ class LocationRepository @Inject constructor(
         backendLocation: com.example.geogeusserclone.data.network.BackendLocation,
         prefix: String
     ): Result<LocationEntity> {
-        // KORREKTUR: Verwende Street View URL direkt aus der Backend-Response
+        // Street View URL robust extrahieren
         val streetViewUrl = try {
-            // Zuerst versuche die Street View API für mobile optimierte URL
             withTimeout(1500L) {
                 val streetViewResponse = apiService.getStreetView(
                     locationId = backendLocation.id,
@@ -192,12 +191,13 @@ class LocationRepository @Inject constructor(
 
                 if (streetViewResponse.isSuccessful && streetViewResponse.body()?.success == true) {
                     val data = streetViewResponse.body()!!.data
-                    val urls = data.streetViewUrls
-                    val url = urls?.get("tablet")
-                        ?: urls?.get("desktop")
-                        ?: urls?.get("mobile")
+                    // NEU: Robust aus streetViewUrlsRaw extrahieren
+                    val raw = data.streetViewUrlsRaw
+                    val url = raw?.get("tablet")?.jsonPrimitive?.contentOrNull
+                        ?: raw?.get("desktop")?.jsonPrimitive?.contentOrNull
+                        ?: raw?.get("mobile")?.jsonPrimitive?.contentOrNull
                         ?: data.streetViewUrl
-                    println("LocationRepository: StreetView API URL: $url")
+                    println("LocationRepository: StreetView API URL (robust): $url")
                     url
                 } else {
                     println("LocationRepository: StreetView API fehlgeschlagen, nutze imageUrls")
