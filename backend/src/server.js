@@ -161,12 +161,12 @@ if (require.main === module) {
   const socketService = require("./services/socketService");
   socketService.initialize(server);
 
-  server.listen(PORT, '0.0.0.0', (err) => {
+  server.listen(PORT, "0.0.0.0", (err) => {
     if (err) {
       console.error(`❌ Failed to start server:`, err.message);
       process.exit(1);
     }
-    
+
     console.log(`🚀 Server running on port ${PORT}`);
     console.log(`📡 API URL: http://localhost:${PORT}`);
     console.log(`📡 API URL (IPv4): http://127.0.0.1:${PORT}`);
@@ -175,14 +175,18 @@ if (require.main === module) {
     console.log(
       `⚔️ Battle Royale service: http://localhost:${PORT}/api/battle-royale`
     );
-    
+
     // Test if server is actually listening on IPv4
-    const http = require('http');
-    http.get(`http://127.0.0.1:${PORT}/health`, (res) => {
-      console.log(`✅ Server health check passed (IPv4) - Status: ${res.statusCode}`);
-    }).on('error', (err) => {
-      console.error(`❌ Server health check failed (IPv4):`, err.message);
-    });
+    const http = require("http");
+    http
+      .get(`http://127.0.0.1:${PORT}/health`, (res) => {
+        console.log(
+          `✅ Server health check passed (IPv4) - Status: ${res.statusCode}`
+        );
+      })
+      .on("error", (err) => {
+        console.error(`❌ Server health check failed (IPv4):`, err.message);
+      });
   });
 }
 

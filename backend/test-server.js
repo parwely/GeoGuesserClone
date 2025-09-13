@@ -33,23 +33,25 @@ app.use("*", (req, res) => {
   });
 });
 
-app.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Simple test server running on port ${PORT}`);
   console.log(`📡 Test: http://127.0.0.1:${PORT}/api/battle-royale`);
-  
+
   // Test self-request after a brief delay
   setTimeout(() => {
-    const http = require('http');
-    console.log('🔍 Testing self-request...');
-    http.get(`http://127.0.0.1:${PORT}/api/battle-royale`, (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        console.log('✅ Self-test passed! Status:', res.statusCode);
-        console.log('📦 Response:', data.substring(0, 100) + '...');
+    const http = require("http");
+    console.log("🔍 Testing self-request...");
+    http
+      .get(`http://127.0.0.1:${PORT}/api/battle-royale`, (res) => {
+        let data = "";
+        res.on("data", (chunk) => (data += chunk));
+        res.on("end", () => {
+          console.log("✅ Self-test passed! Status:", res.statusCode);
+          console.log("📦 Response:", data.substring(0, 100) + "...");
+        });
+      })
+      .on("error", (err) => {
+        console.error("❌ Self-test failed:", err.message);
       });
-    }).on('error', (err) => {
-      console.error('❌ Self-test failed:', err.message);
-    });
   }, 1000);
 });
