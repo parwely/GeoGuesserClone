@@ -193,9 +193,9 @@ class LocationRepository @Inject constructor(
                 if (streetViewResponse.isSuccessful && streetViewResponse.body()?.success == true) {
                     val data = streetViewResponse.body()!!.data
                     val urls = data.streetViewUrls
-                    val url = urls?.get("mobile")
-                        ?: urls?.get("tablet")
+                    val url = urls?.get("tablet")
                         ?: urls?.get("desktop")
+                        ?: urls?.get("mobile")
                         ?: data.streetViewUrl
                     println("LocationRepository: StreetView API URL: $url")
                     url
@@ -445,6 +445,17 @@ class LocationRepository @Inject constructor(
             }
         } catch (e: Exception) {
             Result.failure(e)
+        }
+    }
+
+    suspend fun isStreetViewAvailable(locationId: String): Boolean {
+        return try {
+            val numericId = locationId.toIntOrNull()
+            if (numericId == null) return false
+            val response = apiService.checkStreetViewAvailability(numericId)
+            response.isSuccessful && response.body()?.streetViewAvailable == true
+        } catch (e: Exception) {
+            false
         }
     }
 }

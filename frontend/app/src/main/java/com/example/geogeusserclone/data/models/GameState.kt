@@ -12,5 +12,6 @@ data class GameState(
     val timeRemaining: Long = 120000L, // 2 Minuten default
     val currentRound: Int = 1,
     val totalRounds: Int = 5,
-    val gameScore: Int = 0
+    val gameScore: Int = 0,
+    val streetViewAvailable: Boolean = false // NEW: Street View availability flag
 )

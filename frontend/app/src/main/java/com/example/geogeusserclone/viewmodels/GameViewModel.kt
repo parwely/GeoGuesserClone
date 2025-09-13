@@ -278,11 +278,17 @@ class GameViewModel @Inject constructor(
                 if (nextLocation != null) {
                     println("GameViewModel: Lade Location ${currentLocationIndex}: ${nextLocation.city}")
 
+                    // Prüfe Street View Verfügbarkeit
+                    val streetViewAvailable = withContext(Dispatchers.IO) {
+                        locationRepository.isStreetViewAvailable(nextLocation.id)
+                    }
+
                     _uiState.update { state ->
                         state.copy(
                             currentLocation = nextLocation,
                             isLoading = false,
-                            error = null
+                            error = null,
+                            streetViewAvailable = streetViewAvailable
                         )
                     }
                     startRoundTimer()

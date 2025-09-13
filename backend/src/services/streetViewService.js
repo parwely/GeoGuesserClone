@@ -85,17 +85,21 @@ class StreetViewService {
     return true;
   }
 
-  // Generate optimized URLs for different device sizes
-  generateResponsiveUrls(latitude, longitude, heading = null) {
+  // Generate optimized URLs for different device sizes with mobile fallback
+  generateResponsiveUrls(latitude, longitude, heading = null, userAgent = null) {
     const sizes = [
-      { name: "mobile", size: "400x400" },
-      { name: "tablet", size: "640x640" },
-      { name: "desktop", size: "800x600" },
+      { name: "mobile", size: "400x400", priority: 1 },
+      { name: "tablet", size: "640x640", priority: 2 },
+      { name: "desktop", size: "800x600", priority: 3 },
     ];
 
     const actualHeading = heading !== null ? heading : this.getRandomHeading();
 
-    return sizes.reduce((urls, sizeConfig) => {
+    // Detect if we should use higher quality for mobile due to reliability issues
+    const isMobileRequest = this.detectMobileUserAgent(userAgent);
+    const shouldUseFallback = this.shouldUseMobileFallback(latitude, longitude);
+
+    const urls = sizes.reduce((urlMap, sizeConfig) => {
       const params = new URLSearchParams({
         ...this.defaultParams,
         size: sizeConfig.size,
@@ -104,9 +108,86 @@ class StreetViewService {
         key: this.apiKey,
       });
 
-      urls[sizeConfig.name] = `${this.baseUrl}?${params.toString()}`;
-      return urls;
+      urlMap[sizeConfig.name] = `${this.baseUrl}?${params.toString()}`;
+      return urlMap;
     }, {});
+
+    // If mobile URLs are unreliable, return tablet/desktop URLs for mobile requests
+    if (isMobileRequest && shouldUseFallback) {
+      console.log(`📱 Mobile URL fallback activated for ${latitude},${longitude} - using tablet quality`);
+      urls.mobile = urls.tablet; // Use tablet quality for mobile
+      urls.mobileFallback = true;
+    }
+
+    return urls;
+  }
+
+  // Detect mobile user agent
+  detectMobileUserAgent(userAgent) {
+    if (!userAgent) return false;
+    
+    const mobilePatterns = [
+      /Mobile/i,
+      /Android/i,
+      /iPhone/i,
+      /iPad/i,
+      /iPod/i,
+      /BlackBerry/i,
+      /Windows Phone/i
+    ];
+    
+    return mobilePatterns.some(pattern => pattern.test(userAgent));
+  }
+
+  // Check if mobile URLs should use fallback for this location
+  shouldUseMobileFallback(latitude, longitude) {
+    // List of coordinate ranges where mobile Street View is known to be problematic
+    const problematicRegions = [
+      // Remote locations
+      { lat: { min: -90, max: -60 }, lng: { min: -180, max: 180 } }, // Antarctica region
+      { lat: { min: 60, max: 90 }, lng: { min: -180, max: 180 } },   // Arctic region
+      
+      // Desert regions (often have limited Street View coverage)
+      { lat: { min: 15, max: 35 }, lng: { min: -15, max: 55 } },     // Sahara/Arabian deserts
+      { lat: { min: -30, max: -15 }, lng: { min: 110, max: 155 } },  // Australian outback
+      
+      // Mountain regions (coverage can be spotty)
+      { lat: { min: 25, max: 40 }, lng: { min: 60, max: 100 } },     // Himalayas
+      { lat: { min: -60, max: -30 }, lng: { min: -80, max: -30 } },  // Andes
+    ];
+
+    // Check if coordinates fall in problematic regions
+    const isProblematic = problematicRegions.some(region => 
+      latitude >= region.lat.min && latitude <= region.lat.max &&
+      longitude >= region.lng.min && longitude <= region.lng.max
+    );
+
+    return isProblematic;
+  }
+
+  // Enhanced method to generate responsive URLs with request context
+  generateResponsiveUrlsWithContext(latitude, longitude, heading = null, requestContext = {}) {
+    const { userAgent, deviceType, preferHighQuality = false } = requestContext;
+    
+    const urls = this.generateResponsiveUrls(latitude, longitude, heading, userAgent);
+    
+    // Additional fallback strategies
+    if (preferHighQuality || deviceType === 'tablet') {
+      console.log(`🔧 High quality requested for ${latitude},${longitude}`);
+      // For tablets or when high quality is preferred, always use tablet+ resolution
+      urls.mobile = urls.tablet;
+    }
+
+    // Add metadata about the URLs
+    urls._metadata = {
+      coordinates: { latitude, longitude },
+      heading: heading || this.getRandomHeading(),
+      fallbackUsed: !!urls.mobileFallback,
+      userAgent: userAgent ? 'detected' : 'unknown',
+      deviceType: deviceType || (this.detectMobileUserAgent(userAgent) ? 'mobile' : 'desktop')
+    };
+
+    return urls;
   }
 
   // ========================

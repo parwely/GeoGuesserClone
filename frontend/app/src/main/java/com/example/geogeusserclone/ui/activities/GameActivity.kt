@@ -97,7 +97,8 @@ fun GameScreen(
                     location = gameState.currentLocation,
                     timeRemaining = gameState.timeRemaining,
                     onShowMap = onShowMap,
-                    onPan = onPan
+                    onPan = onPan,
+                    streetViewAvailable = gameState.streetViewAvailable // Pass flag from UI state
                 )
             }
 

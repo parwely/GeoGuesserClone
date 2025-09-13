@@ -30,7 +30,8 @@ fun LocationImageScreen(
     location: LocationEntity,
     timeRemaining: Long,
     onShowMap: () -> Unit,
-    onPan: (Float) -> Unit = {}
+    onPan: (Float) -> Unit = {},
+    streetViewAvailable: Boolean = false // NEW: pass from UI state
 ) {
     val context = LocalContext.current
 
@@ -53,9 +54,19 @@ fun LocationImageScreen(
         modifier = Modifier.fillMaxSize()
     ) {
         // Smart Image Display mit robustem Fallback
-        if (isValidStreetViewUrl && effectiveImageUrl.isNotBlank()) {
-            // Interactive Street View für gültige Google Maps URLs
+        if (streetViewAvailable && effectiveImageUrl.isNotBlank()) {
             println("LocationImageScreen: Zeige Interactive Street View an: $effectiveImageUrl")
+
+            // Debug: Check Coil painter state for image loading errors
+            val painter = rememberAsyncImagePainter(
+                model = ImageRequest.Builder(context)
+                    .data(effectiveImageUrl)
+                    .crossfade(300)
+                    .memoryCachePolicy(coil.request.CachePolicy.ENABLED)
+                    .diskCachePolicy(coil.request.CachePolicy.ENABLED)
+                    .build()
+            )
+            println("LocationImageScreen: Coil painter state: ${painter.state}")
 
             InteractiveStreetView(
                 imageUrl = effectiveImageUrl,
