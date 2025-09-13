@@ -37,25 +37,12 @@ fun LocationImageScreen(
     MemoryManager.AutoMemoryManagement(context)
 
     // Smart Image URL Selection mit Fallback-Logik
-    val effectiveImageUrl = remember(location.imageUrl) {
-        val url = when {
-            // Prüfe auf gültige Street View URL
-            location.imageUrl.contains("maps.googleapis.com") &&
-            !location.imageUrl.contains("key=-") && // Ungültige API Keys abfangen
-            location.imageUrl.contains("key=AIza") -> {
-                println("LocationImageScreen: Verwende gültige Street View URL: ${location.imageUrl}")
-                location.imageUrl
-            }
-            // Fallback auf Unsplash basierend auf Stadt
-            else -> {
-                val fallbackUrl = getImageUrlForCity(location.city ?: "Unknown")
-                println("LocationImageScreen: Street View ungültig, verwende Fallback: $fallbackUrl")
-                fallbackUrl
-            }
-        }
-        println("LocationImageScreen: Effektive Image URL: $url")
-        url
+    val isValidStreetViewUrl = remember(location.imageUrl) {
+        // Accept any Google Maps Street View URL with a key
+        location.imageUrl.startsWith("https://maps.googleapis.com/maps/api/streetview") &&
+        Regex("key=AIza[\w-]+", RegexOption.IGNORE_CASE).containsMatchIn(location.imageUrl)
     }
+    val effectiveImageUrl = location.imageUrl
 
     // Tracking der aktuellen Position für erweiterte Navigation
     var currentLatitude by remember { mutableDoubleStateOf(location.latitude) }
@@ -65,63 +52,62 @@ fun LocationImageScreen(
         modifier = Modifier.fillMaxSize()
     ) {
         // Smart Image Display mit robustem Fallback
-        if (effectiveImageUrl.isNotBlank()) {
-            if (effectiveImageUrl.contains("maps.googleapis.com")) {
-                // Interactive Street View für gültige Google Maps URLs
-                println("LocationImageScreen: Zeige Interactive Street View an: $effectiveImageUrl")
+        if (isValidStreetViewUrl && effectiveImageUrl.isNotBlank()) {
+            // Interactive Street View für gültige Google Maps URLs
+            println("LocationImageScreen: Zeige Interactive Street View an: $effectiveImageUrl")
 
-                InteractiveStreetView(
-                    imageUrl = effectiveImageUrl,
-                    modifier = Modifier.fillMaxSize(),
-                    onPan = onPan,
-                    onLocationChange = { lat, lng ->
-                        currentLatitude = lat
-                        currentLongitude = lng
-                        println("LocationImageScreen: Neue Position: $lat, $lng")
-                    }
+            InteractiveStreetView(
+                imageUrl = effectiveImageUrl,
+                modifier = Modifier.fillMaxSize(),
+                onPan = onPan,
+                onLocationChange = { lat, lng ->
+                    currentLatitude = lat
+                    currentLongitude = lng
+                    println("LocationImageScreen: Neue Position: $lat, $lng")
+                }
+            )
+        } else if (effectiveImageUrl.isNotBlank()) {
+            // Statisches Fallback-Bild mit verbesserter UI
+            val fallbackUrl = getImageUrlForCity(location.city ?: "Unknown")
+            println("LocationImageScreen: Zeige Fallback-Bild an: $fallbackUrl")
+
+            AsyncImage(
+                model = ImageRequest.Builder(context)
+                    .data(fallbackUrl)
+                    .crossfade(300)
+                    .memoryCachePolicy(coil.request.CachePolicy.ENABLED)
+                    .diskCachePolicy(coil.request.CachePolicy.ENABLED)
+                    .build(),
+                contentDescription = "Location: ${location.city}",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+
+            // Fallback Overlay Indicator
+            Card(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.9f)
                 )
-            } else {
-                // Statisches Fallback-Bild mit verbesserter UI
-                println("LocationImageScreen: Zeige Fallback-Bild an: $effectiveImageUrl")
-
-                AsyncImage(
-                    model = ImageRequest.Builder(context)
-                        .data(effectiveImageUrl)
-                        .crossfade(300)
-                        .memoryCachePolicy(coil.request.CachePolicy.ENABLED)
-                        .diskCachePolicy(coil.request.CachePolicy.ENABLED)
-                        .build(),
-                    contentDescription = "Location: ${location.city}",
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                )
-
-                // Fallback Overlay Indicator
-                Card(
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(16.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.9f)
-                    )
+            ) {
+                Row(
+                    modifier = Modifier.padding(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        modifier = Modifier.padding(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Default.Place,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.onSecondaryContainer
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "Beispielbild",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer
-                        )
-                    }
+                    Icon(
+                        Icons.Default.Place,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Beispielbild",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
                 }
             }
         } else {
