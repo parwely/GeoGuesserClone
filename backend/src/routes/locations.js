@@ -282,7 +282,12 @@ router.get("/health", async (req, res) => {
 router.get("/:id/streetview", async (req, res) => {
   try {
     const { id } = req.params;
-    const { heading, multiple = false, responsive = false, preferHighQuality = false } = req.query;
+    const {
+      heading,
+      multiple = false,
+      responsive = false,
+      preferHighQuality = false,
+    } = req.query;
 
     const location = await locationService.getLocationById(parseInt(id));
 
@@ -299,27 +304,25 @@ router.get("/:id/streetview", async (req, res) => {
     if (responsive === "true") {
       // Generate responsive URLs with enhanced fallback logic
       const requestContext = {
-        userAgent: req.get('User-Agent'),
-        deviceType: req.get('X-Device-Type'), // Custom header if frontend sends it
-        preferHighQuality: preferHighQuality === 'true'
+        userAgent: req.get("User-Agent"),
+        deviceType: req.get("X-Device-Type"), // Custom header if frontend sends it
+        preferHighQuality: preferHighQuality === "true",
       };
-      
-      response.data.streetViewUrls = streetViewService.generateResponsiveUrlsWithContext(
-        location.coordinates.latitude,
-        location.coordinates.longitude,
-        heading ? parseInt(heading) : null,
-        requestContext
-      );
-      
-      console.log(
-        `StreetView responsive URLs for location ${id}:`,
-        {
-          mobile: response.data.streetViewUrls.mobile.substring(0, 100) + '...',
-          tablet: response.data.streetViewUrls.tablet.substring(0, 100) + '...',
-          desktop: response.data.streetViewUrls.desktop.substring(0, 100) + '...',
-          fallbackUsed: response.data.streetViewUrls.mobileFallback || false
-        }
-      );
+
+      response.data.streetViewUrls =
+        streetViewService.generateResponsiveUrlsWithContext(
+          location.coordinates.latitude,
+          location.coordinates.longitude,
+          heading ? parseInt(heading) : null,
+          requestContext
+        );
+
+      console.log(`StreetView responsive URLs for location ${id}:`, {
+        mobile: response.data.streetViewUrls.mobile.substring(0, 100) + "...",
+        tablet: response.data.streetViewUrls.tablet.substring(0, 100) + "...",
+        desktop: response.data.streetViewUrls.desktop.substring(0, 100) + "...",
+        fallbackUsed: response.data.streetViewUrls.mobileFallback || false,
+      });
     } else if (multiple === "true") {
       // Generate multiple view angles
       response.data.streetViewUrls = streetViewService.generateViewAngles(
@@ -365,11 +368,11 @@ router.get("/:id/streetview/reliable", async (req, res) => {
 
     // Always use enhanced context for reliable URLs
     const requestContext = {
-      userAgent: req.get('User-Agent'),
-      deviceType: req.get('X-Device-Type'),
-      preferHighQuality: true // Always prefer high quality for reliable endpoint
+      userAgent: req.get("User-Agent"),
+      deviceType: req.get("X-Device-Type"),
+      preferHighQuality: true, // Always prefer high quality for reliable endpoint
     };
-    
+
     const reliableUrls = streetViewService.generateResponsiveUrlsWithContext(
       location.coordinates.latitude,
       location.coordinates.longitude,
@@ -378,7 +381,9 @@ router.get("/:id/streetview/reliable", async (req, res) => {
     );
 
     // Additional reliability checks
-    const isMobile = streetViewService.detectMobileUserAgent(requestContext.userAgent);
+    const isMobile = streetViewService.detectMobileUserAgent(
+      requestContext.userAgent
+    );
     const shouldFallback = streetViewService.shouldUseMobileFallback(
       location.coordinates.latitude,
       location.coordinates.longitude
@@ -396,20 +401,25 @@ router.get("/:id/streetview/reliable", async (req, res) => {
         reliability: {
           isMobileDevice: isMobile,
           fallbackApplied: shouldFallback,
-          recommendedUrl: isMobile && shouldFallback ? reliableUrls.tablet : reliableUrls.mobile,
-          qualityLevel: isMobile && shouldFallback ? 'tablet' : (isMobile ? 'mobile' : 'desktop')
-        }
+          recommendedUrl:
+            isMobile && shouldFallback
+              ? reliableUrls.tablet
+              : reliableUrls.mobile,
+          qualityLevel:
+            isMobile && shouldFallback
+              ? "tablet"
+              : isMobile
+              ? "mobile"
+              : "desktop",
+        },
       },
     };
 
-    console.log(
-      `✅ Reliable Street View URLs generated for location ${id}:`,
-      {
-        fallbackApplied: shouldFallback,
-        isMobile: isMobile,
-        recommendedQuality: response.data.reliability.qualityLevel
-      }
-    );
+    console.log(`✅ Reliable Street View URLs generated for location ${id}:`, {
+      fallbackApplied: shouldFallback,
+      isMobile: isMobile,
+      recommendedQuality: response.data.reliability.qualityLevel,
+    });
 
     res.json(response);
   } catch (error) {

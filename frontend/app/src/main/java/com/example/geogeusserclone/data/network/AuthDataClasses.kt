@@ -1,9 +1,9 @@
 package com.example.geogeusserclone.data.network
 
+import kotlinx.serialization.Contextual
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 // Authentication Request Classes
@@ -118,7 +118,7 @@ data class StreetViewData(
     val location: StreetViewLocation,
     val streetViewUrl: String? = null,
     val streetViewUrls: Map<String, String>? = null, // Legacy
-    val streetViewUrlsRaw: JsonObject? = null // NEU: Rohdaten für gemischte Typen
+    @Contextual val streetViewUrlsRaw: JsonObject? = null // NEU: Rohdaten für gemischte Typen
 )
 
 @Serializable

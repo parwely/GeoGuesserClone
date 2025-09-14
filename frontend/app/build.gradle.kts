@@ -175,6 +175,9 @@ dependencies {
     implementation("io.socket:socket.io-client:2.0.0") { exclude(group = "org.json", module = "json") }
     implementation("org.json:json:20210307")
 
+    // Serialization
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0")
+
     // Testing
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

@@ -8,6 +8,10 @@ import com.example.geogeusserclone.data.network.MapillaryApiService
 import com.example.geogeusserclone.utils.Constants
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.Flow
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
 import java.util.*
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -191,12 +195,29 @@ class LocationRepository @Inject constructor(
 
                 if (streetViewResponse.isSuccessful && streetViewResponse.body()?.success == true) {
                     val data = streetViewResponse.body()!!.data
-                    // NEU: Robust aus streetViewUrlsRaw extrahieren
+                    // Robust extrahieren: Prüfe alle möglichen Felder
                     val raw = data.streetViewUrlsRaw
-                    val url = raw?.get("tablet")?.jsonPrimitive?.contentOrNull
-                        ?: raw?.get("desktop")?.jsonPrimitive?.contentOrNull
-                        ?: raw?.get("mobile")?.jsonPrimitive?.contentOrNull
+                    val legacyMap = data.streetViewUrls
+                    val urlFromRaw = raw?.let { jsonObj ->
+                        listOf("tablet", "desktop", "mobile")
+                            .mapNotNull { key ->
+                                val value = jsonObj[key]
+                                if (value is JsonPrimitive && value.isString) value.contentOrNull else null
+                            }
+                            .firstOrNull()
+                    }
+                    val urlFromLegacy = legacyMap?.let { map ->
+                        listOf("tablet", "desktop", "mobile")
+                            .mapNotNull { key ->
+                                val value = map[key]
+                                if (value != null && value is String) value else null
+                            }
+                            .firstOrNull()
+                    }
+                    val url = urlFromRaw
+                        ?: urlFromLegacy
                         ?: data.streetViewUrl
+
                     println("LocationRepository: StreetView API URL (robust): $url")
                     url
                 } else {
