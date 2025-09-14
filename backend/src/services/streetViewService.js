@@ -212,6 +212,41 @@ class StreetViewService {
     return urls;
   }
 
+  // Generate clean responsive URLs for Kotlin/Android compatibility (Map<String, String>)
+  generateCleanResponsiveUrls(
+    latitude,
+    longitude,
+    heading = null,
+    requestContext = {}
+  ) {
+    const { userAgent, deviceType, preferHighQuality = false } = requestContext;
+
+    const urls = this.generateResponsiveUrls(
+      latitude,
+      longitude,
+      heading,
+      userAgent
+    );
+
+    // Additional fallback strategies
+    if (preferHighQuality || deviceType === "tablet") {
+      console.log(`🔧 High quality requested for ${latitude},${longitude}`);
+      // For tablets or when high quality is preferred, always use tablet+ resolution
+      urls.mobile = urls.tablet;
+    }
+
+    // Return clean URLs without metadata for Kotlin compatibility
+    const cleanUrls = {};
+    for (const [key, value] of Object.entries(urls)) {
+      if (typeof value === "string" || value === null) {
+        cleanUrls[key] = value;
+      }
+      // Skip any non-string, non-null values to prevent serialization issues
+    }
+
+    return cleanUrls;
+  }
+
   // ========================
   // INTERACTIVE STREET VIEW
   // ========================
@@ -411,20 +446,22 @@ class StreetViewService {
   async validateStreetViewCoverage(lat, lng) {
     try {
       if (!this.apiKey) {
-        console.warn('Street View API key not configured for coverage validation');
+        console.warn(
+          "Street View API key not configured for coverage validation"
+        );
         return { hasCoverage: false, status: "NO_API_KEY" };
       }
 
       const metadataUrl = `https://maps.googleapis.com/maps/api/streetview/metadata?location=${lat},${lng}&key=${this.apiKey}`;
-      
+
       const response = await fetch(metadataUrl);
-      
+
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
-      
+
       const data = await response.json();
-      
+
       const result = {
         hasCoverage: data.status === "OK",
         status: data.status,
@@ -435,21 +472,25 @@ class StreetViewService {
         if (data.location) {
           result.location = {
             lat: data.location.lat,
-            lng: data.location.lng
+            lng: data.location.lng,
           };
         }
-        console.log(`✅ Street View coverage confirmed for ${lat}, ${lng} (Pano ID: ${data.pano_id})`);
+        console.log(
+          `✅ Street View coverage confirmed for ${lat}, ${lng} (Pano ID: ${data.pano_id})`
+        );
       } else {
-        console.log(`❌ No Street View coverage at ${lat}, ${lng} (Status: ${data.status})`);
+        console.log(
+          `❌ No Street View coverage at ${lat}, ${lng} (Status: ${data.status})`
+        );
       }
-      
+
       return result;
     } catch (error) {
-      console.error('Street View coverage validation error:', error.message);
+      console.error("Street View coverage validation error:", error.message);
       return {
         hasCoverage: false,
         status: "ERROR",
-        error: error.message
+        error: error.message,
       };
     }
   }
@@ -460,24 +501,31 @@ class StreetViewService {
    * @returns {Promise<Array<{location: object, validation: object}>>}
    */
   async validateMultipleLocations(locations) {
-    console.log(`🔍 Validating Street View coverage for ${locations.length} locations...`);
-    
+    console.log(
+      `🔍 Validating Street View coverage for ${locations.length} locations...`
+    );
+
     const results = [];
-    
+
     for (const location of locations) {
-      const validation = await this.validateStreetViewCoverage(location.lat, location.lng);
+      const validation = await this.validateStreetViewCoverage(
+        location.lat,
+        location.lng
+      );
       results.push({
         location: location,
-        validation: validation
+        validation: validation,
       });
-      
+
       // Rate limiting - small delay between requests
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 100));
     }
-    
-    const validCount = results.filter(r => r.validation.hasCoverage).length;
-    console.log(`📊 Coverage validation complete: ${validCount}/${locations.length} locations have Street View`);
-    
+
+    const validCount = results.filter((r) => r.validation.hasCoverage).length;
+    console.log(
+      `📊 Coverage validation complete: ${validCount}/${locations.length} locations have Street View`
+    );
+
     return results;
   }
 }

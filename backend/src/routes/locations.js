@@ -309,8 +309,9 @@ router.get("/:id/streetview", async (req, res) => {
         preferHighQuality: preferHighQuality === "true",
       };
 
+      // Use clean URLs for Kotlin compatibility - no _metadata object
       response.data.streetViewUrls =
-        streetViewService.generateResponsiveUrlsWithContext(
+        streetViewService.generateCleanResponsiveUrls(
           location.coordinates.latitude,
           location.coordinates.longitude,
           heading ? parseInt(heading) : null,
@@ -318,10 +319,13 @@ router.get("/:id/streetview", async (req, res) => {
         );
 
       console.log(`StreetView responsive URLs for location ${id}:`, {
-        mobile: response.data.streetViewUrls.mobile.substring(0, 100) + "...",
-        tablet: response.data.streetViewUrls.tablet.substring(0, 100) + "...",
-        desktop: response.data.streetViewUrls.desktop.substring(0, 100) + "...",
-        fallbackUsed: response.data.streetViewUrls.mobileFallback || false,
+        mobile: response.data.streetViewUrls.mobile?.substring(0, 100) + "...",
+        tablet: response.data.streetViewUrls.tablet?.substring(0, 100) + "...",
+        desktop:
+          response.data.streetViewUrls.desktop?.substring(0, 100) + "...",
+        mobileFallback: response.data.streetViewUrls.mobileFallback
+          ? "available"
+          : "none",
       });
     } else if (multiple === "true") {
       // Generate multiple view angles
@@ -373,7 +377,8 @@ router.get("/:id/streetview/reliable", async (req, res) => {
       preferHighQuality: true, // Always prefer high quality for reliable endpoint
     };
 
-    const reliableUrls = streetViewService.generateResponsiveUrlsWithContext(
+    // Use clean URLs for Kotlin compatibility - no _metadata object
+    const cleanUrls = streetViewService.generateCleanResponsiveUrls(
       location.coordinates.latitude,
       location.coordinates.longitude,
       heading ? parseInt(heading) : null,
@@ -397,14 +402,12 @@ router.get("/:id/streetview/reliable", async (req, res) => {
           name: location.name,
           coordinates: location.coordinates,
         },
-        streetViewUrls: reliableUrls,
+        streetViewUrls: cleanUrls,
         reliability: {
           isMobileDevice: isMobile,
           fallbackApplied: shouldFallback,
           recommendedUrl:
-            isMobile && shouldFallback
-              ? reliableUrls.tablet
-              : reliableUrls.mobile,
+            isMobile && shouldFallback ? cleanUrls.tablet : cleanUrls.mobile,
           qualityLevel:
             isMobile && shouldFallback
               ? "tablet"
