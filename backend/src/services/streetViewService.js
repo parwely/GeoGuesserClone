@@ -401,6 +401,85 @@ class StreetViewService {
         this.mapillaryClientId !== "your_mapillary_client_id_here")
     );
   }
+
+  /**
+   * Validates Street View coverage at given coordinates using metadata API
+   * @param {number} lat - Latitude
+   * @param {number} lng - Longitude
+   * @returns {Promise<{hasCoverage: boolean, status: string, panoId?: string, location?: object}>}
+   */
+  async validateStreetViewCoverage(lat, lng) {
+    try {
+      if (!this.apiKey) {
+        console.warn('Street View API key not configured for coverage validation');
+        return { hasCoverage: false, status: "NO_API_KEY" };
+      }
+
+      const metadataUrl = `https://maps.googleapis.com/maps/api/streetview/metadata?location=${lat},${lng}&key=${this.apiKey}`;
+      
+      const response = await fetch(metadataUrl);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      
+      const result = {
+        hasCoverage: data.status === "OK",
+        status: data.status,
+      };
+
+      if (data.status === "OK") {
+        result.panoId = data.pano_id;
+        if (data.location) {
+          result.location = {
+            lat: data.location.lat,
+            lng: data.location.lng
+          };
+        }
+        console.log(`✅ Street View coverage confirmed for ${lat}, ${lng} (Pano ID: ${data.pano_id})`);
+      } else {
+        console.log(`❌ No Street View coverage at ${lat}, ${lng} (Status: ${data.status})`);
+      }
+      
+      return result;
+    } catch (error) {
+      console.error('Street View coverage validation error:', error.message);
+      return {
+        hasCoverage: false,
+        status: "ERROR",
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Validates multiple locations for Street View coverage
+   * @param {Array<{lat: number, lng: number, name?: string}>} locations
+   * @returns {Promise<Array<{location: object, validation: object}>>}
+   */
+  async validateMultipleLocations(locations) {
+    console.log(`🔍 Validating Street View coverage for ${locations.length} locations...`);
+    
+    const results = [];
+    
+    for (const location of locations) {
+      const validation = await this.validateStreetViewCoverage(location.lat, location.lng);
+      results.push({
+        location: location,
+        validation: validation
+      });
+      
+      // Rate limiting - small delay between requests
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    
+    const validCount = results.filter(r => r.validation.hasCoverage).length;
+    console.log(`📊 Coverage validation complete: ${validCount}/${locations.length} locations have Street View`);
+    
+    return results;
+  }
 }
 
 module.exports = new StreetViewService();
