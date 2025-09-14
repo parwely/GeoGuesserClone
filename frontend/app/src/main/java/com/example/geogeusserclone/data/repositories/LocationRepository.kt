@@ -199,20 +199,26 @@ class LocationRepository @Inject constructor(
                     val raw = data.streetViewUrlsRaw
                     val legacyMap = data.streetViewUrls
                     val urlFromRaw = raw?.let { jsonObj ->
-                        listOf("tablet", "desktop", "mobile")
-                            .mapNotNull { key ->
-                                val value = jsonObj[key]
-                                if (value is JsonPrimitive && value.isString) value.contentOrNull else null
+                        var found: String? = null
+                        for (key in listOf("tablet", "desktop", "mobile")) {
+                            val value = jsonObj[key]
+                            if (value is JsonPrimitive && value.isString) {
+                                found = value.contentOrNull
+                                if (found != null) break
                             }
-                            .firstOrNull()
+                        }
+                        found
                     }
                     val urlFromLegacy = legacyMap?.let { map ->
-                        listOf("tablet", "desktop", "mobile")
-                            .mapNotNull { key ->
-                                val value = map[key]
-                                if (value != null && value is String) value else null
+                        var found: String? = null
+                        for (key in listOf("tablet", "desktop", "mobile")) {
+                            val value = map[key]
+                            if (value != null && value is String) {
+                                found = value
+                                break
                             }
-                            .firstOrNull()
+                        }
+                        found
                     }
                     val url = urlFromRaw
                         ?: urlFromLegacy

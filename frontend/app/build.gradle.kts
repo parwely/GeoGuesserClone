@@ -70,8 +70,7 @@ android {
             "-opt-in=androidx.compose.material3.ExperimentalMaterial3Api",
             "-opt-in=androidx.compose.foundation.ExperimentalFoundationApi",
             "-opt-in=kotlinx.coroutines.ExperimentalCoroutinesApi",
-            "-Xjvm-default=all", // Bessere Java Interop Performance
-            "-Xbackend-threads=4" // Parallele Compilation
+            "-Xjvm-default=all" // Bessere Java Interop Performance
         )
     }
 
