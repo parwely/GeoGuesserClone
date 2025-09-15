@@ -4,14 +4,14 @@ const sampleLocations = [
   // URBAN - all difficulties
   {
     name: "Times Square",
-    country: "United States", 
+    country: "United States",
     city: "New York",
     latitude: 40.758896,
-    longitude: -73.985130,
+    longitude: -73.98513,
     difficulty: 1,
     category: "urban",
     image_urls: ["https://example.com/times-square.jpg"],
-    hints: { signs: "English", traffic: "yellow taxis", lights: "neon" }
+    hints: { signs: "English", traffic: "yellow taxis", lights: "neon" },
   },
   {
     name: "Piccadilly Circus",
@@ -22,18 +22,22 @@ const sampleLocations = [
     difficulty: 2,
     category: "urban",
     image_urls: ["https://example.com/piccadilly.jpg"],
-    hints: { driving: "left side", architecture: "Victorian", traffic: "buses" }
+    hints: {
+      driving: "left side",
+      architecture: "Victorian",
+      traffic: "buses",
+    },
   },
   {
     name: "Shibuya Crossing",
     country: "Japan",
     city: "Tokyo",
     latitude: 35.659515,
-    longitude: 139.700310,
+    longitude: 139.70031,
     difficulty: 3,
     category: "urban",
     image_urls: ["https://example.com/shibuya.jpg"],
-    hints: { crossing: "pedestrian", signs: "Japanese", crowds: "dense" }
+    hints: { crossing: "pedestrian", signs: "Japanese", crowds: "dense" },
   },
   {
     name: "Dam Square",
@@ -44,7 +48,7 @@ const sampleLocations = [
     difficulty: 4,
     category: "urban",
     image_urls: ["https://example.com/dam-square.jpg"],
-    hints: { palace: "royal", trams: "present", architecture: "dutch" }
+    hints: { palace: "royal", trams: "present", architecture: "dutch" },
   },
   {
     name: "Prague Old Town",
@@ -55,7 +59,11 @@ const sampleLocations = [
     difficulty: 5,
     category: "urban",
     image_urls: ["https://example.com/prague.jpg"],
-    hints: { architecture: "gothic", cobblestone: "streets", castle: "visible" }
+    hints: {
+      architecture: "gothic",
+      cobblestone: "streets",
+      castle: "visible",
+    },
   },
 
   // COASTAL - all difficulties
@@ -68,7 +76,11 @@ const sampleLocations = [
     difficulty: 1,
     category: "coastal",
     image_urls: ["https://example.com/miami-beach.jpg"],
-    hints: { architecture: "art_deco", palm_trees: "present", beach: "white_sand" }
+    hints: {
+      architecture: "art_deco",
+      palm_trees: "present",
+      beach: "white_sand",
+    },
   },
   {
     name: "Bondi Beach",
@@ -79,7 +91,7 @@ const sampleLocations = [
     difficulty: 2,
     category: "coastal",
     image_urls: ["https://example.com/bondi.jpg"],
-    hints: { beach: "famous", surfers: "present", cliffs: "sandstone" }
+    hints: { beach: "famous", surfers: "present", cliffs: "sandstone" },
   },
   {
     name: "Copacabana Beach",
@@ -90,18 +102,18 @@ const sampleLocations = [
     difficulty: 3,
     category: "coastal",
     image_urls: ["https://example.com/copacabana.jpg"],
-    hints: { beach: "curved", mountains: "sugarloaf", portuguese: "language" }
+    hints: { beach: "curved", mountains: "sugarloaf", portuguese: "language" },
   },
   {
     name: "Amalfi Coast",
     country: "Italy",
     city: "Amalfi",
-    latitude: 40.6340,
+    latitude: 40.634,
     longitude: 14.6027,
     difficulty: 4,
     category: "coastal",
     image_urls: ["https://example.com/amalfi.jpg"],
-    hints: { cliffs: "dramatic", lemon_trees: "present", mediterranean: "sea" }
+    hints: { cliffs: "dramatic", lemon_trees: "present", mediterranean: "sea" },
   },
   {
     name: "Big Sur Coast",
@@ -112,7 +124,7 @@ const sampleLocations = [
     difficulty: 5,
     category: "coastal",
     image_urls: ["https://example.com/big-sur.jpg"],
-    hints: { redwoods: "forest", pacific: "ocean", fog: "frequent" }
+    hints: { redwoods: "forest", pacific: "ocean", fog: "frequent" },
   },
 
   // DESERT - all difficulties
@@ -125,7 +137,7 @@ const sampleLocations = [
     difficulty: 1,
     category: "desert",
     image_urls: ["https://example.com/death-valley.jpg"],
-    hints: { landscape: "desert", heat: "extreme", below_sea_level: "true" }
+    hints: { landscape: "desert", heat: "extreme", below_sea_level: "true" },
   },
   {
     name: "Wadi Rum",
@@ -136,7 +148,7 @@ const sampleLocations = [
     difficulty: 2,
     category: "desert",
     image_urls: ["https://example.com/wadi-rum.jpg"],
-    hints: { rock_formations: "red", desert: "protected", nomads: "bedouin" }
+    hints: { rock_formations: "red", desert: "protected", nomads: "bedouin" },
   },
   {
     name: "Sahara Desert Road",
@@ -147,7 +159,7 @@ const sampleLocations = [
     difficulty: 3,
     category: "desert",
     image_urls: ["https://example.com/sahara.jpg"],
-    hints: { landscape: "desert", dunes: "sand", vegetation: "sparse" }
+    hints: { landscape: "desert", dunes: "sand", vegetation: "sparse" },
   },
   {
     name: "Atacama Desert",
@@ -158,7 +170,7 @@ const sampleLocations = [
     difficulty: 4,
     category: "desert",
     image_urls: ["https://example.com/atacama.jpg"],
-    hints: { altitude: "high", landscape: "arid", mountains: "volcanic" }
+    hints: { altitude: "high", landscape: "arid", mountains: "volcanic" },
   },
   {
     name: "Gobi Desert",
@@ -169,7 +181,7 @@ const sampleLocations = [
     difficulty: 5,
     category: "desert",
     image_urls: ["https://example.com/gobi.jpg"],
-    hints: { climate: "extreme", landscape: "barren", nomads: "present" }
+    hints: { climate: "extreme", landscape: "barren", nomads: "present" },
   },
 
   // RURAL - all difficulties
@@ -182,7 +194,7 @@ const sampleLocations = [
     difficulty: 1,
     category: "rural",
     image_urls: ["https://example.com/ireland.jpg"],
-    hints: { fields: "green", stone_walls: "present", sheep: "grazing" }
+    hints: { fields: "green", stone_walls: "present", sheep: "grazing" },
   },
   {
     name: "French Countryside",
@@ -193,7 +205,7 @@ const sampleLocations = [
     difficulty: 2,
     category: "rural",
     image_urls: ["https://example.com/provence.jpg"],
-    hints: { lavender: "fields", vineyards: "present", stone_houses: "old" }
+    hints: { lavender: "fields", vineyards: "present", stone_houses: "old" },
   },
   {
     name: "Tuscany Countryside",
@@ -204,7 +216,7 @@ const sampleLocations = [
     difficulty: 3,
     category: "rural",
     image_urls: ["https://example.com/tuscany.jpg"],
-    hints: { hills: "rolling", vineyards: "present", cypresses: "tall" }
+    hints: { hills: "rolling", vineyards: "present", cypresses: "tall" },
   },
   {
     name: "Scottish Highlands",
@@ -213,9 +225,9 @@ const sampleLocations = [
     latitude: 57.4778,
     longitude: -4.2247,
     difficulty: 4,
-    category: "rural", 
+    category: "rural",
     image_urls: ["https://example.com/highlands.jpg"],
-    hints: { landscape: "mountainous", sheep: "present", castles: "ancient" }
+    hints: { landscape: "mountainous", sheep: "present", castles: "ancient" },
   },
   {
     name: "Japanese Village",
@@ -226,7 +238,11 @@ const sampleLocations = [
     difficulty: 5,
     category: "rural",
     image_urls: ["https://example.com/shirakawa.jpg"],
-    hints: { architecture: "traditional", mountains: "visible", rice: "fields" }
+    hints: {
+      architecture: "traditional",
+      mountains: "visible",
+      rice: "fields",
+    },
   },
 
   // ARCTIC - all difficulties
@@ -239,18 +255,18 @@ const sampleLocations = [
     difficulty: 1,
     category: "arctic",
     image_urls: ["https://example.com/iceland.jpg"],
-    hints: { geysers: "present", volcanic: "landscape", aurora: "visible" }
+    hints: { geysers: "present", volcanic: "landscape", aurora: "visible" },
   },
   {
     name: "Northern Canada",
     country: "Canada",
     city: "Yellowknife",
-    latitude: 62.4540,
+    latitude: 62.454,
     longitude: -114.3718,
     difficulty: 2,
     category: "arctic",
     image_urls: ["https://example.com/yellowknife.jpg"],
-    hints: { lakes: "frozen", aurora: "borealis", indigenous: "culture" }
+    hints: { lakes: "frozen", aurora: "borealis", indigenous: "culture" },
   },
   {
     name: "Siberian Road",
@@ -261,7 +277,7 @@ const sampleLocations = [
     difficulty: 3,
     category: "arctic",
     image_urls: ["https://example.com/siberia.jpg"],
-    hints: { tundra: "landscape", permafrost: "ground", mining: "city" }
+    hints: { tundra: "landscape", permafrost: "ground", mining: "city" },
   },
   {
     name: "Lapland Road",
@@ -272,7 +288,7 @@ const sampleLocations = [
     difficulty: 4,
     category: "arctic",
     image_urls: ["https://example.com/lapland.jpg"],
-    hints: { trees: "evergreen", snow: "frequent", reindeer: "present" }
+    hints: { trees: "evergreen", snow: "frequent", reindeer: "present" },
   },
   {
     name: "Svalbard Settlement",
@@ -283,10 +299,14 @@ const sampleLocations = [
     difficulty: 5,
     category: "arctic",
     image_urls: ["https://example.com/svalbard.jpg"],
-    hints: { arctic: "circle", polar_bears: "warning_signs", permafrost: "visible" }
+    hints: {
+      arctic: "circle",
+      polar_bears: "warning_signs",
+      permafrost: "visible",
+    },
   },
 
-  // NATURE - all difficulties  
+  // NATURE - all difficulties
   {
     name: "Central Park",
     country: "United States",
@@ -296,29 +316,29 @@ const sampleLocations = [
     difficulty: 1,
     category: "forest",
     image_urls: ["https://example.com/central-park.jpg"],
-    hints: { park: "urban", skyscrapers: "surrounding", paths: "paved" }
+    hints: { park: "urban", skyscrapers: "surrounding", paths: "paved" },
   },
   {
     name: "Yosemite Valley",
     country: "United States",
-    city: "California", 
+    city: "California",
     latitude: 37.7459,
     longitude: -119.5936,
     difficulty: 2,
     category: "mountain",
     image_urls: ["https://example.com/yosemite.jpg"],
-    hints: { granite: "cliffs", waterfalls: "tall", sequoia: "trees" }
+    hints: { granite: "cliffs", waterfalls: "tall", sequoia: "trees" },
   },
   {
     name: "Yellowstone National Park",
     country: "United States",
     city: "Yellowstone",
-    latitude: 44.4280,
+    latitude: 44.428,
     longitude: -110.5885,
     difficulty: 3,
     category: "forest",
     image_urls: ["https://example.com/yellowstone.jpg"],
-    hints: { geysers: "present", wildlife: "bison", landscape: "volcanic" }
+    hints: { geysers: "present", wildlife: "bison", landscape: "volcanic" },
   },
   {
     name: "Banff National Park",
@@ -329,7 +349,7 @@ const sampleLocations = [
     difficulty: 4,
     category: "mountain",
     image_urls: ["https://example.com/banff.jpg"],
-    hints: { lakes: "turquoise", mountains: "rocky", wildlife: "bears" }
+    hints: { lakes: "turquoise", mountains: "rocky", wildlife: "bears" },
   },
   {
     name: "Amazon Rainforest Road",
@@ -340,7 +360,7 @@ const sampleLocations = [
     difficulty: 5,
     category: "forest",
     image_urls: ["https://example.com/amazon.jpg"],
-    hints: { vegetation: "dense", humidity: "high", wildlife: "diverse" }
+    hints: { vegetation: "dense", humidity: "high", wildlife: "diverse" },
   },
 
   // LANDMARK - all difficulties
@@ -353,7 +373,7 @@ const sampleLocations = [
     difficulty: 1,
     category: "landmark",
     image_urls: ["https://example.com/golden-gate.jpg"],
-    hints: { bridge: "suspension", color: "red", fog: "frequent" }
+    hints: { bridge: "suspension", color: "red", fog: "frequent" },
   },
   {
     name: "Sydney Harbour Bridge",
@@ -364,7 +384,7 @@ const sampleLocations = [
     difficulty: 2,
     category: "landmark",
     image_urls: ["https://example.com/harbour-bridge.jpg"],
-    hints: { bridge: "arch", water: "harbor", opera_house: "nearby" }
+    hints: { bridge: "arch", water: "harbor", opera_house: "nearby" },
   },
   {
     name: "Brandenburg Gate",
@@ -375,7 +395,7 @@ const sampleLocations = [
     difficulty: 3,
     category: "landmark",
     image_urls: ["https://example.com/brandenburg.jpg"],
-    hints: { gate: "historic", columns: "sandstone", square: "wide" }
+    hints: { gate: "historic", columns: "sandstone", square: "wide" },
   },
   {
     name: "Red Square",
@@ -386,7 +406,7 @@ const sampleLocations = [
     difficulty: 4,
     category: "landmark",
     image_urls: ["https://example.com/red-square.jpg"],
-    hints: { square: "cobblestone", kremlin: "walls", domes: "colorful" }
+    hints: { square: "cobblestone", kremlin: "walls", domes: "colorful" },
   },
   {
     name: "Machu Picchu",
@@ -397,15 +417,15 @@ const sampleLocations = [
     difficulty: 5,
     category: "landmark",
     image_urls: ["https://example.com/machu-picchu.jpg"],
-    hints: { ruins: "Inca", altitude: "high", terraces: "stone" }
-  }
+    hints: { ruins: "Inca", altitude: "high", terraces: "stone" },
+  },
 ];
 
 async function seedLocations() {
   try {
     console.log("🌍 Seeding sample locations...");
     await database.connect();
-    
+
     const deleteQuery = "DELETE FROM locations WHERE 1=1";
     await database.query(deleteQuery);
     console.log("🗑️ Cleared existing locations");
@@ -417,7 +437,7 @@ async function seedLocations() {
       `;
       const coordinates = {
         type: "Point",
-        coordinates: [location.longitude, location.latitude]
+        coordinates: [location.longitude, location.latitude],
       };
       await database.query(insertQuery, [
         location.name,
@@ -427,22 +447,21 @@ async function seedLocations() {
         location.difficulty,
         location.category,
         location.image_urls,
-        location.hints
+        location.hints,
       ]);
       console.log(`✅ Added location: ${location.name}, ${location.country}`);
     }
 
     console.log(`🎉 Successfully seeded ${sampleLocations.length} locations!`);
-    
+
     const categories = {};
     const difficulties = {};
-    sampleLocations.forEach(loc => {
+    sampleLocations.forEach((loc) => {
       categories[loc.category] = (categories[loc.category] || 0) + 1;
       difficulties[loc.difficulty] = (difficulties[loc.difficulty] || 0) + 1;
     });
     console.log("📊 Category distribution:", categories);
     console.log("📊 Difficulty distribution:", difficulties);
-
   } catch (error) {
     console.error("❌ Failed to seed locations:", error.message);
   } finally {

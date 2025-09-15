@@ -13,14 +13,14 @@ class LocationService {
 
     this.categories = [
       "landmark",
-      "urban", 
+      "urban",
       "rural",
       "desert",
       "mountain",
       "coastal",
       "forest",
       "arctic",
-      "nature"
+      "nature",
     ];
   }
 
