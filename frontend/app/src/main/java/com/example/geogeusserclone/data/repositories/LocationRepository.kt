@@ -485,4 +485,125 @@ class LocationRepository @Inject constructor(
             false
         }
     }
+
+    // Neue Methoden für interaktive Street View
+    suspend fun getInteractiveStreetView(
+        locationId: Int,
+        quality: String = "high",
+        enableNavigation: Boolean = true
+    ): Result<InteractiveStreetViewResponse> {
+        return try {
+            val response = apiService.getInteractiveStreetView(
+                locationId = locationId,
+                quality = quality,
+                enableNavigation = enableNavigation
+            )
+
+            if (response.isSuccessful && response.body()?.success == true) {
+                Result.success(response.body()!!)
+            } else {
+                Result.failure(Exception("Interaktive Street View nicht verfügbar"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun navigateStreetView(
+        currentLat: Double,
+        currentLng: Double,
+        direction: String,
+        heading: Int,
+        stepSize: Double = 25.0
+    ): Result<StreetViewNavigationResponse> {
+        return try {
+            val request = StreetViewNavigationRequest(
+                currentLat = currentLat,
+                currentLng = currentLng,
+                direction = direction,
+                heading = heading,
+                stepSize = stepSize
+            )
+
+            val response = apiService.navigateStreetView(request)
+
+            if (response.isSuccessful && response.body()?.success == true) {
+                Result.success(response.body()!!)
+            } else {
+                Result.failure(Exception("Navigation fehlgeschlagen"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getEnhancedRandomLocations(
+        count: Int = 5,
+        difficulty: Int? = null,
+        category: String? = null,
+        streetViewQuality: String = "high"
+    ): Result<List<LocationEntity>> {
+        return try {
+            val response = apiService.getEnhancedRandomLocations(
+                count = count,
+                difficulty = difficulty,
+                category = category,
+                includeStreetView = true,
+                streetViewQuality = streetViewQuality
+            )
+
+            if (response.isSuccessful && response.body()?.success == true) {
+                val locations = response.body()!!.data.locations.map { enhancedLocation ->
+                    LocationEntity(
+                        id = enhancedLocation.id.toString(),
+                        latitude = enhancedLocation.coordinates.latitude,
+                        longitude = enhancedLocation.coordinates.longitude,
+                        imageUrl = enhancedLocation.streetView?.embedUrl ?: enhancedLocation.imageUrls.firstOrNull() ?: "",
+                        country = enhancedLocation.country,
+                        city = enhancedLocation.city,
+                        difficulty = enhancedLocation.difficulty,
+                        isCached = true,
+                        isUsed = false
+                    )
+                }
+
+                // Cache locations
+                locationDao.insertLocations(locations)
+                Result.success(locations)
+            } else {
+                Result.failure(Exception("Keine erweiterten Locations verfügbar"))
+            }
+        } catch (e: Exception) {
+            // Fallback to existing method
+            println("LocationRepository: Enhanced locations failed, using fallback")
+            (1..count).map { getRandomLocation() }
+                .mapNotNull { it.getOrNull() }
+                .let { locations ->
+                    if (locations.size >= count) Result.success(locations)
+                    else Result.failure(Exception("Nicht genügend Locations verfügbar"))
+                }
+        }
+    }
+
+    suspend fun getBulkStreetView(
+        locationIds: List<String>,
+        quality: String = "medium",
+        interactive: Boolean = true
+    ): Result<Map<String, InteractiveStreetView>> {
+        return try {
+            val response = apiService.getBulkStreetView(
+                locationIds = locationIds.joinToString(","),
+                quality = quality,
+                interactive = interactive
+            )
+
+            if (response.isSuccessful && response.body() != null) {
+                Result.success(response.body()!!)
+            } else {
+                Result.failure(Exception("Bulk Street View laden fehlgeschlagen"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }

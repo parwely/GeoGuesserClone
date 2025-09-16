@@ -1,7 +1,7 @@
 // Test script for mobile fallback functionality
 require("dotenv").config();
 
-const streetViewService = require("./src/services/streetViewService");
+const streetViewService = require("../src/services/streetViewService");
 
 // Test coordinates (Sydney Opera House from our database)
 const testCoordinates = {

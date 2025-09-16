@@ -9,7 +9,8 @@ router.get("/random", async (req, res) => {
   try {
     console.log("🔍 Location Route: /random called with query:", req.query);
 
-    const { count, difficulty, category, country, exclude } = req.query;
+    const { count, difficulty, category, country, exclude, includeStreetView } =
+      req.query;
 
     // Validate query parameters
     const errors = locationService.validateLocationQuery(req.query);
@@ -34,6 +35,34 @@ router.get("/random", async (req, res) => {
     const locations = await locationService.getRandomLocations(options);
     console.log("✅ Location Route: Retrieved locations:", locations.length);
 
+    // If includeStreetView is requested, add interactive Street View URLs
+    if (includeStreetView === "true") {
+      for (let location of locations) {
+        try {
+          const streetViewResponse =
+            await streetViewService.generateStreetViewResponse(
+              location.coordinates.latitude,
+              location.coordinates.longitude,
+              {
+                heading: null, // Random heading will be generated
+                zoom: 1,
+                fallbackType: "static",
+              }
+            );
+          location.streetView = streetViewResponse;
+          console.log(
+            `✅ Added interactive Street View for location ${location.id}`
+          );
+        } catch (error) {
+          console.error(
+            `❌ Failed to generate Street View for location ${location.id}:`,
+            error.message
+          );
+          // Continue without Street View data for this location
+        }
+      }
+    }
+
     res.json({
       success: true,
       data: {
@@ -45,6 +74,7 @@ router.get("/random", async (req, res) => {
           country: options.country,
           excluded: options.excludeIds.length,
         },
+        streetViewIncluded: includeStreetView === "true",
       },
     });
   } catch (error) {
@@ -278,83 +308,163 @@ router.get("/health", async (req, res) => {
   }
 });
 
-// Get Street View image for location
+// Get interactive Street View URL for location - New primary endpoint
 router.get("/:id/streetview", async (req, res) => {
   try {
     const { id } = req.params;
     const {
       heading,
-      multiple = false,
-      responsive = false,
-      preferHighQuality = false,
+      zoom,
+      interactive = true,
+      fallbackType = "static",
     } = req.query;
+
+    console.log(
+      `🌍 Street View request for location ${id} - Interactive: ${interactive}`
+    );
 
     const location = await locationService.getLocationById(parseInt(id));
 
-    const response = {
-      success: true,
-      data: {
-        location: {
-          id: location.id,
-          coordinates: location.coordinates,
-        },
-      },
-    };
-
-    if (responsive === "true") {
-      // Generate responsive URLs with enhanced fallback logic
-      const requestContext = {
-        userAgent: req.get("User-Agent"),
-        deviceType: req.get("X-Device-Type"), // Custom header if frontend sends it
-        preferHighQuality: preferHighQuality === "true",
-      };
-
-      // Use clean URLs for Kotlin compatibility - no _metadata object
-      response.data.streetViewUrls =
-        streetViewService.generateCleanResponsiveUrls(
+    if (interactive === "true" || interactive === true) {
+      // Generate interactive Street View response
+      const streetViewResponse =
+        await streetViewService.generateStreetViewResponse(
           location.coordinates.latitude,
           location.coordinates.longitude,
-          heading ? parseInt(heading) : null,
-          requestContext
+          {
+            heading: heading ? parseInt(heading) : null,
+            zoom: zoom ? parseFloat(zoom) : null,
+            fallbackType: fallbackType,
+          }
         );
 
-      console.log(`StreetView responsive URLs for location ${id}:`, {
-        mobile: response.data.streetViewUrls.mobile?.substring(0, 100) + "...",
-        tablet: response.data.streetViewUrls.tablet?.substring(0, 100) + "...",
-        desktop:
-          response.data.streetViewUrls.desktop?.substring(0, 100) + "...",
-        mobileFallback: response.data.streetViewUrls.mobileFallback
-          ? "available"
-          : "none",
-      });
-    } else if (multiple === "true") {
-      // Generate multiple view angles
-      response.data.streetViewUrls = streetViewService.generateViewAngles(
-        location.coordinates.latitude,
-        location.coordinates.longitude
-      );
+      const response = {
+        success: true,
+        data: {
+          location: {
+            id: location.id,
+            name: location.name,
+            coordinates: location.coordinates,
+          },
+          streetView: streetViewResponse,
+        },
+      };
+
       console.log(
-        `StreetView multiple URLs for location ${id}:`,
-        response.data.streetViewUrls
+        `✅ Interactive Street View URL generated for location ${id}`
       );
+      res.json(response);
     } else {
-      // Single Street View URL
-      response.data.streetViewUrl = streetViewService.generateUrl(
+      // Legacy static URL support for backward compatibility
+      const streetViewUrl = streetViewService.generateUrl(
         location.coordinates.latitude,
         location.coordinates.longitude,
         heading ? parseInt(heading) : null
       );
-      console.log(
-        `StreetView URL for location ${id}:`,
-        response.data.streetViewUrl
-      );
-    }
 
-    res.json(response);
+      const response = {
+        success: true,
+        data: {
+          location: {
+            id: location.id,
+            coordinates: location.coordinates,
+          },
+          streetViewUrl: streetViewUrl,
+        },
+      };
+
+      console.log(`✅ Static Street View URL generated for location ${id}`);
+      res.json(response);
+    }
   } catch (error) {
     console.error("❌ Street View request failed:", error.message);
     res.status(500).json({
-      error: "Failed to get Street View image",
+      error: "Failed to get Street View URL",
+      message: "Internal server error",
+    });
+  }
+});
+
+// Dynamic Street View navigation endpoint
+router.post("/streetview/navigate", async (req, res) => {
+  try {
+    const { latitude, longitude, direction, distance, zoom } = req.body;
+
+    console.log(`🧭 Street View navigation request:`, {
+      latitude,
+      longitude,
+      direction,
+      distance,
+    });
+
+    // Validate input parameters
+    if (!latitude || !longitude || !direction) {
+      return res.status(400).json({
+        error: "Missing required parameters",
+        message: "latitude, longitude, and direction are required",
+      });
+    }
+
+    if (isNaN(latitude) || latitude < -90 || latitude > 90) {
+      return res.status(400).json({
+        error: "Invalid latitude",
+        message: "Latitude must be a number between -90 and 90",
+      });
+    }
+
+    if (isNaN(longitude) || longitude < -180 || longitude > 180) {
+      return res.status(400).json({
+        error: "Invalid longitude",
+        message: "Longitude must be a number between -180 and 180",
+      });
+    }
+
+    // Calculate new position based on navigation
+    const newPosition = streetViewService.calculateNavigationPosition(
+      parseFloat(latitude),
+      parseFloat(longitude),
+      direction,
+      distance || 50, // Default 50 meters
+      zoom || 1
+    );
+
+    // Generate new interactive Street View URL
+    const streetViewResponse =
+      await streetViewService.generateStreetViewResponse(
+        newPosition.latitude,
+        newPosition.longitude,
+        {
+          heading: newPosition.heading,
+          zoom: newPosition.zoom,
+          fallbackType: "static",
+        }
+      );
+
+    const response = {
+      success: true,
+      data: {
+        navigation: {
+          originalPosition: { latitude, longitude },
+          newPosition: {
+            latitude: newPosition.latitude,
+            longitude: newPosition.longitude,
+          },
+          direction: direction,
+          distance: distance || 50,
+          heading: newPosition.heading,
+        },
+        streetView: streetViewResponse,
+      },
+    };
+
+    console.log(
+      `✅ Street View navigation completed from ${latitude},${longitude} to ${newPosition.latitude},${newPosition.longitude}`
+    );
+    res.json(response);
+  } catch (error) {
+    console.error("❌ Street View navigation failed:", error.message);
+    res.status(500).json({
+      error: "Failed to navigate Street View",
       message: "Internal server error",
     });
   }
@@ -434,24 +544,37 @@ router.get("/:id/streetview/reliable", async (req, res) => {
   }
 });
 
-// Get interactive Street View with fallbacks - Public endpoint
+// Get enhanced interactive Street View with navigation controls - Public endpoint
 router.get("/:id/streetview/interactive", async (req, res) => {
   try {
     const { id } = req.params;
-    const { heading } = req.query;
+    const {
+      heading,
+      zoom,
+      enableNavigation = true,
+      quality = "high",
+    } = req.query;
 
-    console.log(`🌍 Interactive Street View request for location ${id}`);
+    console.log(
+      `🌍 Enhanced interactive Street View request for location ${id}`
+    );
 
     const location = await locationService.getLocationById(parseInt(id));
 
-    const interactiveData =
-      await streetViewService.generateInteractiveStreetView(
+    // Generate comprehensive interactive Street View data
+    const interactiveResponse =
+      await streetViewService.generateInteractiveStreetViewUrl(
         location.coordinates.latitude,
         location.coordinates.longitude,
-        heading ? parseInt(heading) : null
+        {
+          heading: heading ? parseInt(heading) : null,
+          zoom: zoom ? parseFloat(zoom) : 1,
+          enableNavigation: enableNavigation === "true",
+          quality: quality,
+        }
       );
 
-    res.json({
+    const response = {
       success: true,
       data: {
         location: {
@@ -459,13 +582,33 @@ router.get("/:id/streetview/interactive", async (req, res) => {
           name: location.name,
           coordinates: location.coordinates,
         },
-        interactive: interactiveData,
+        interactive: {
+          embedUrl: interactiveResponse.embedUrl,
+          navigationEnabled: interactiveResponse.navigationEnabled,
+          controls: interactiveResponse.controls,
+          configuration: interactiveResponse.configuration,
+          fallback: interactiveResponse.fallback,
+        },
+        metadata: {
+          quality: quality,
+          supportsNavigation: true,
+          recommendedFor: ["webview", "iframe"],
+          apiVersion: "1.0",
+        },
       },
-    });
+    };
+
+    console.log(
+      `✅ Enhanced interactive Street View generated for location ${id}`
+    );
+    res.json(response);
   } catch (error) {
-    console.error("❌ Interactive Street View request failed:", error.message);
+    console.error(
+      "❌ Enhanced interactive Street View request failed:",
+      error.message
+    );
     res.status(500).json({
-      error: "Failed to get interactive Street View",
+      error: "Failed to get enhanced interactive Street View",
       message: "Internal server error",
     });
   }

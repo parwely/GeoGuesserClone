@@ -109,4 +109,37 @@ interface ApiService {
     // Health Check
     @GET("health")
     suspend fun getHealth(): Response<HealthResponse>
+
+    // Enhanced Street View Endpoints für interaktive Features
+    @GET("locations/{id}/streetview/interactive")
+    suspend fun getInteractiveStreetView(
+        @Path("id") locationId: Int,
+        @Query("quality") quality: String = "high",
+        @Query("enableNavigation") enableNavigation: Boolean = true,
+        @Query("heading") heading: Int? = null,
+        @Query("pitch") pitch: Int? = null
+    ): Response<InteractiveStreetViewResponse>
+
+    @POST("locations/streetview/navigate")
+    suspend fun navigateStreetView(
+        @Body request: StreetViewNavigationRequest
+    ): Response<StreetViewNavigationResponse>
+
+    // Enhanced Random Locations mit eingebetteter Street View
+    @GET("locations/random/enhanced")
+    suspend fun getEnhancedRandomLocations(
+        @Query("count") count: Int = 5,
+        @Query("difficulty") difficulty: Int? = null,
+        @Query("category") category: String? = null,
+        @Query("includeStreetView") includeStreetView: Boolean = true,
+        @Query("streetViewQuality") streetViewQuality: String = "high"
+    ): Response<EnhancedLocationResponse>
+
+    // Bulk Street View für mehrere Locations
+    @GET("locations/streetview/bulk")
+    suspend fun getBulkStreetView(
+        @Query("locationIds") locationIds: String, // Comma-separated IDs
+        @Query("quality") quality: String = "medium",
+        @Query("interactive") interactive: Boolean = true
+    ): Response<Map<String, InteractiveStreetView>>
 }

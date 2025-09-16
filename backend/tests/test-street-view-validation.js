@@ -1,5 +1,5 @@
 require("dotenv").config();
-const streetViewService = require("./src/services/streetViewService");
+const streetViewService = require("../src/services/streetViewService");
 
 async function testStreetViewValidation() {
   console.log("🔍 Testing Street View coverage validation...\n");

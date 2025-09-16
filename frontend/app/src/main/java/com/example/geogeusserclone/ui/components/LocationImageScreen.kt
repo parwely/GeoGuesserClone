@@ -17,12 +17,17 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import android.webkit.WebSettings
 import coil.compose.AsyncImage
 import coil.compose.AsyncImagePainter
 import coil.compose.rememberAsyncImagePainter
 import coil.request.ImageRequest
 import com.example.geogeusserclone.data.database.entities.LocationEntity
 import com.example.geogeusserclone.utils.MemoryManager
+import kotlinx.coroutines.launch
 import java.util.Locale
 
 @Composable
@@ -31,145 +36,128 @@ fun LocationImageScreen(
     timeRemaining: Long,
     onShowMap: () -> Unit,
     onPan: (Float) -> Unit = {},
-    streetViewAvailable: Boolean = false // NEW: pass from UI state
+    streetViewAvailable: Boolean = false
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     // Automatisches Memory Management
     MemoryManager.AutoMemoryManagement(context)
 
-    // Smart Image URL Selection mit Fallback-Logik
-    val isValidStreetViewUrl = remember(location.imageUrl) {
-        // Accept any Google Maps Street View URL with a key
-        location.imageUrl.startsWith("https://maps.googleapis.com/maps/api/streetview") &&
-        Regex("key=AIza[\\w-]+", RegexOption.IGNORE_CASE).containsMatchIn(location.imageUrl)
-    }
-    val effectiveImageUrl = location.imageUrl
+    // Enhanced Street View Detection mit mehr Präzision
+    val streetViewMode = remember(location.imageUrl) {
+        when {
+            // Google Maps Embed URL (Interaktiv)
+            location.imageUrl.contains("google.com/maps/embed/v1/streetview") ||
+            location.imageUrl.contains("navigation=1") -> StreetViewMode.Interactive
 
-    // Tracking der aktuellen Position für erweiterte Navigation
+            // Statische Google Street View API
+            location.imageUrl.startsWith("https://maps.googleapis.com/maps/api/streetview") &&
+            Regex("key=AIza[\\w-]+", RegexOption.IGNORE_CASE).containsMatchIn(location.imageUrl) -> StreetViewMode.Static
+
+            // Fallback Bilder
+            location.imageUrl.contains("unsplash.com") ||
+            location.imageUrl.contains("images.") -> StreetViewMode.Fallback
+
+            // Kein Bild verfügbar
+            location.imageUrl.isBlank() -> StreetViewMode.Empty
+
+            else -> StreetViewMode.Unknown
+        }
+    }
+
+    // Navigation State für interaktive Street View
+    var currentHeading by remember { mutableIntStateOf(0) }
     var currentLatitude by remember { mutableDoubleStateOf(location.latitude) }
     var currentLongitude by remember { mutableDoubleStateOf(location.longitude) }
 
     Box(
         modifier = Modifier.fillMaxSize()
     ) {
-        // Smart Image Display mit robustem Fallback
-        if (streetViewAvailable && effectiveImageUrl.isNotBlank()) {
-            println("LocationImageScreen: Zeige Interactive Street View an: $effectiveImageUrl")
+        when (streetViewMode) {
+            StreetViewMode.Interactive -> {
+                println("LocationImageScreen: Zeige Enhanced Interactive Street View an")
 
-            // Debug: Check Coil painter state for image loading errors
-            val painter = rememberAsyncImagePainter(
-                model = ImageRequest.Builder(context)
-                    .data(effectiveImageUrl)
-                    .crossfade(300)
-                    .memoryCachePolicy(coil.request.CachePolicy.ENABLED)
-                    .diskCachePolicy(coil.request.CachePolicy.ENABLED)
-                    .build()
-            )
-            println("LocationImageScreen: Coil painter state: ${painter.state}")
-
-            InteractiveStreetView(
-                imageUrl = effectiveImageUrl,
-                modifier = Modifier.fillMaxSize(),
-                onPan = onPan,
-                onLocationChange = { lat, lng ->
-                    currentLatitude = lat
-                    currentLongitude = lng
-                    println("LocationImageScreen: Neue Position: $lat, $lng")
-                }
-            )
-        } else if (effectiveImageUrl.isNotBlank()) {
-            // Statisches Fallback-Bild mit verbesserter UI
-            val fallbackUrl = getImageUrlForCity(location.city ?: "Unknown")
-            println("LocationImageScreen: Zeige Fallback-Bild an: $fallbackUrl")
-
-            AsyncImage(
-                model = ImageRequest.Builder(context)
-                    .data(fallbackUrl)
-                    .crossfade(300)
-                    .memoryCachePolicy(coil.request.CachePolicy.ENABLED)
-                    .diskCachePolicy(coil.request.CachePolicy.ENABLED)
-                    .build(),
-                contentDescription = "Location: ${location.city}",
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
-
-            // Fallback Overlay Indicator
-            Card(
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(16.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.9f)
+                // NEUE: Enhanced Street View Komponente
+                EnhancedStreetViewComponent(
+                    locationId = location.id.toIntOrNull() ?: 1,
+                    modifier = Modifier.fillMaxSize(),
+                    quality = "high",
+                    enableNavigation = true,
+                    enableControls = true,
+                    onNavigationRequest = { direction, heading, stepSize ->
+                        // Handle navigation requests
+                        scope.launch {
+                            println("Navigation Request: $direction, heading: $heading°, step: ${stepSize}m")
+                            currentHeading = heading
+                            // TODO: Implement actual navigation via repository
+                        }
+                    },
+                    onError = { error ->
+                        println("Enhanced Street View Error: $error")
+                    }
                 )
-            ) {
-                Row(
-                    modifier = Modifier.padding(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        Icons.Default.Place,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.onSecondaryContainer
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "Beispielbild",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                    )
-                }
             }
-        } else {
-            // Emergency Fallback - keine URL verfügbar
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Icon(
-                        Icons.Default.Place,
-                        contentDescription = null,
-                        modifier = Modifier.size(64.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = "Bild nicht verfügbar",
-                        style = MaterialTheme.typography.titleMedium,
-                        textAlign = TextAlign.Center
-                    )
-                    Text(
-                        text = "Location: ${location.city ?: "Unbekannt"}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        textAlign = TextAlign.Center,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+
+            StreetViewMode.Static -> {
+                println("LocationImageScreen: Zeige bestehende Interactive Street View (statisch) an")
+
+                InteractiveStreetView(
+                    imageUrl = location.imageUrl,
+                    modifier = Modifier.fillMaxSize(),
+                    onPan = onPan,
+                    onLocationChange = { lat, lng ->
+                        currentLatitude = lat
+                        currentLongitude = lng
+                        println("LocationImageScreen: Position geändert: $lat, $lng")
+                    }
+                )
+            }
+
+            StreetViewMode.Fallback -> {
+                println("LocationImageScreen: Zeige Fallback-Bild an: ${location.imageUrl}")
+
+                FallbackImageView(
+                    imageUrl = location.imageUrl,
+                    locationName = location.city ?: "Unbekannt",
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+
+            StreetViewMode.Empty -> {
+                EmptyLocationView(
+                    locationName = location.city ?: "Unbekannt",
+                    country = location.country,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+
+            StreetViewMode.Unknown -> {
+                UnknownFormatView(
+                    imageUrl = location.imageUrl,
+                    locationName = location.city ?: "Unbekannt",
+                    modifier = Modifier.fillMaxSize()
+                )
             }
         }
 
-        // Gradient Overlay für bessere UI-Lesbarkeit (nur minimal)
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Color.Transparent,
-                            Color.Black.copy(alpha = 0.1f)
-                        ),
-                        startY = 0f,
-                        endY = Float.POSITIVE_INFINITY
+        // Gradient Overlay für bessere UI-Lesbarkeit (nur bei non-interactive)
+        if (streetViewMode != StreetViewMode.Interactive) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                Color.Black.copy(alpha = 0.1f)
+                            ),
+                            startY = 0f,
+                            endY = Float.POSITIVE_INFINITY
+                        )
                     )
-                )
-        )
+            )
+        }
 
         // Time Remaining Indicator
         Card(
@@ -189,7 +177,7 @@ fun LocationImageScreen(
             )
         }
 
-        // Current Position Info (für Debug und erweiterte Navigation)
+        // Enhanced Location Info Card
         Card(
             modifier = Modifier
                 .align(Alignment.TopCenter)
@@ -214,7 +202,28 @@ fun LocationImageScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                // Zeige aktuelle Koordinaten (hilfreich für Navigation)
+
+                // Street View Type Indicator
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val (emoji, text, color) = when (streetViewMode) {
+                        StreetViewMode.Interactive -> Triple("🎮", "Interactive", MaterialTheme.colorScheme.primary)
+                        StreetViewMode.Static -> Triple("📸", "Street View", MaterialTheme.colorScheme.secondary)
+                        StreetViewMode.Fallback -> Triple("🖼️", "Beispielbild", MaterialTheme.colorScheme.outline)
+                        StreetViewMode.Empty -> Triple("❌", "Kein Bild", MaterialTheme.colorScheme.error)
+                        StreetViewMode.Unknown -> Triple("❓", "Unbekannt", MaterialTheme.colorScheme.outline)
+                    }
+
+                    Text(
+                        text = "$emoji $text",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = color,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                // Current coordinates (hilfreich für Debug)
                 Text(
                     text = "Pos: ${String.format(Locale.US, "%.4f", currentLatitude)}, ${String.format(Locale.US, "%.4f", currentLongitude)}",
                     style = MaterialTheme.typography.bodySmall,
@@ -241,7 +250,7 @@ fun LocationImageScreen(
             )
         }
 
-        // Guess Button - größer und prominent
+        // Enhanced Guess Button
         Button(
             onClick = onShowMap,
             modifier = Modifier
@@ -266,40 +275,208 @@ fun LocationImageScreen(
             )
         }
 
-        // Navigation Hint (einblendbar)
+        // Enhanced Navigation Hint für interaktive Street View
+        if (streetViewMode == StreetViewMode.Interactive) {
+            Card(
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .padding(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.9f)
+                )
+            ) {
+                Column(
+                    modifier = Modifier.padding(12.dp)
+                ) {
+                    Text(
+                        text = "🎮 Interaktive Navigation",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    Text(
+                        text = "• Bewege dich durch Street View",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    Text(
+                        text = "• Nutze die Navigations-Controls",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    Text(
+                        text = "• Tippe für Controls ein/aus",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+            }
+        } else if (streetViewMode == StreetViewMode.Static) {
+            // Bestehende Navigation Hints für statische Street View
+            Card(
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .padding(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.9f)
+                )
+            ) {
+                Column(
+                    modifier = Modifier.padding(12.dp)
+                ) {
+                    Text(
+                        text = "🎮 Simulation",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "• Ziehen zum Umschauen",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Text(
+                        text = "• Doppeltipp zum Bewegen",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Text(
+                        text = "• Pinch zum Zoomen",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+        }
+    }
+}
+
+// Enum für verschiedene Street View-Modi
+enum class StreetViewMode {
+    Interactive,    // Google Maps Embed mit Navigation
+    Static,        // Google Street View Static API
+    Fallback,      // Fallback-Bilder (Unsplash etc.)
+    Empty,         // Keine URL verfügbar
+    Unknown        // Unbekanntes Format
+}
+
+@Composable
+private fun FallbackImageView(
+    imageUrl: String,
+    locationName: String,
+    modifier: Modifier = Modifier
+) {
+    Box(modifier = modifier) {
+        AsyncImage(
+            model = ImageRequest.Builder(LocalContext.current)
+                .data(imageUrl)
+                .crossfade(300)
+                .memoryCachePolicy(coil.request.CachePolicy.ENABLED)
+                .diskCachePolicy(coil.request.CachePolicy.ENABLED)
+                .build(),
+            contentDescription = "Fallback für $locationName",
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize()
+        )
+
+        // Fallback Indicator
         Card(
             modifier = Modifier
-                .align(Alignment.CenterStart)
+                .align(Alignment.TopStart)
                 .padding(16.dp),
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.9f)
             )
         ) {
-            Column(
-                modifier = Modifier.padding(12.dp)
+            Row(
+                modifier = Modifier.padding(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
+                Text("🖼️", style = MaterialTheme.typography.bodyMedium)
+                Spacer(modifier = Modifier.width(4.dp))
                 Text(
-                    text = "🎮 Navigation",
-                    style = MaterialTheme.typography.bodyMedium,
+                    text = "Beispielbild",
+                    style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.Bold
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyLocationView(
+    locationName: String,
+    country: String?,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.surfaceVariant),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(
+                Icons.Default.Place,
+                contentDescription = null,
+                modifier = Modifier.size(64.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = "Bild nicht verfügbar",
+                style = MaterialTheme.typography.titleMedium,
+                textAlign = TextAlign.Center
+            )
+            Text(
+                text = "Location: $locationName",
+                style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.Center,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            country?.let {
                 Text(
-                    text = "• Ziehen zum Umschauen",
-                    style = MaterialTheme.typography.bodySmall
-                )
-                Text(
-                    text = "• Doppeltipp zum Bewegen",
-                    style = MaterialTheme.typography.bodySmall
-                )
-                Text(
-                    text = "• Pinch zum Zoomen",
-                    style = MaterialTheme.typography.bodySmall
-                )
-                Text(
-                    text = "• Einfachtipp für Controls",
-                    style = MaterialTheme.typography.bodySmall
+                    text = "Land: $it",
+                    style = MaterialTheme.typography.bodySmall,
+                    textAlign = TextAlign.Center,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun UnknownFormatView(
+    imageUrl: String,
+    locationName: String,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.errorContainer),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "❓",
+                style = MaterialTheme.typography.displayLarge
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = "Unbekanntes Bildformat",
+                style = MaterialTheme.typography.titleMedium,
+                textAlign = TextAlign.Center,
+                color = MaterialTheme.colorScheme.onErrorContainer
+            )
+            Text(
+                text = "URL: ${imageUrl.take(50)}...",
+                style = MaterialTheme.typography.bodySmall,
+                textAlign = TextAlign.Center,
+                color = MaterialTheme.colorScheme.onErrorContainer
+            )
         }
     }
 }
@@ -331,23 +508,4 @@ private fun getDifficultyText(difficulty: Int): String {
         5 -> "Sehr Schwer"
         else -> "Unbekannt"
     }
-}
-
-// Hilfsfunktion für Fallback-Bilder
-private fun getImageUrlForCity(city: String): String {
-    val imageMap = mapOf(
-        "Paris" to "https://images.unsplash.com/photo-1502602898536-47ad22581b52?w=800&h=600&fit=crop",
-        "London" to "https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=800&h=600&fit=crop",
-        "New York" to "https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=800&h=600&fit=crop",
-        "Berlin" to "https://images.unsplash.com/photo-1587330979470-3016b6702d89?w=800&h=600&fit=crop",
-        "Tokyo" to "https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=800&h=600&fit=crop",
-        "Sydney" to "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&h=600&fit=crop",
-        "Rome" to "https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=800&h=600&fit=crop",
-        "Barcelona" to "https://images.unsplash.com/photo-1539037116277-4db20889f2d4?w=800&h=600&fit=crop",
-        "Moscow" to "https://images.unsplash.com/photo-1547036967-23d11aacaee0?w=800&h=600&fit=crop",
-        "Mexico City" to "https://images.unsplash.com/photo-1512813195452-83104b651e5f?w=800&h=600&fit=crop"
-    )
-
-    return imageMap[city.split(" ").first()]
-        ?: "https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=800&h=600&fit=crop"
 }

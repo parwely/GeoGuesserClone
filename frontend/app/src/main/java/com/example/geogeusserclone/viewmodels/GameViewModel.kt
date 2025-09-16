@@ -50,56 +50,82 @@ class GameViewModel @Inject constructor(
     private fun startLocationPreloading() {
         locationPreloadJob = viewModelScope.launch(Dispatchers.IO) {
             try {
-                println("GameViewModel: Starte SEQUENZIELLE Location-Beschaffung...")
+                println("GameViewModel: Starte ENHANCED Location-Beschaffung mit interaktiver Street View...")
 
-                val uniqueLocations = mutableListOf<LocationEntity>()
-                val maxAttempts = 12 // Mehr Versuche für Street View
-                var attempts = 0
+                // NEUE: Verwende Enhanced API für bessere Street View-Integration
+                val enhancedResult = locationRepository.getEnhancedRandomLocations(
+                    count = 5,
+                    difficulty = 2, // Mittlere Schwierigkeit für gute Abdeckung
+                    category = null, // Alle Kategorien
+                    streetViewQuality = "high"
+                )
 
-                while (uniqueLocations.size < 5 && attempts < maxAttempts) {
-                    attempts++
-                    val locationResult = locationRepository.getRandomLocation()
-                    locationResult.getOrNull()?.let { location ->
-                        // Prüfe auf Duplikate und Street View-URL
-                        val isDuplicate = uniqueLocations.any { existing ->
-                            val latDiff = kotlin.math.abs(existing.latitude - location.latitude)
-                            val lngDiff = kotlin.math.abs(existing.longitude - location.longitude)
-                            latDiff < 0.001 && lngDiff < 0.001
+                enhancedResult.fold(
+                    onSuccess = { enhancedLocations ->
+                        gameLocations.clear()
+                        gameLocations.addAll(enhancedLocations)
+                        usedLocationIds.clear()
+                        println("GameViewModel: ✅ ${gameLocations.size} Enhanced Locations mit Street View geladen")
+
+                        // Log Street View Types für Debug
+                        gameLocations.forEach { location ->
+                            val isInteractive = location.imageUrl.contains("google.com/maps/embed/v1/streetview") ||
+                                                location.imageUrl.contains("navigation=1")
+                            println("GameViewModel: Location ${location.city}: ${if (isInteractive) "Interactive" else "Static"} Street View")
                         }
-                        val isStreetView = location.imageUrl.startsWith("https://maps.googleapis.com/maps/api/streetview")
-                        if (!isDuplicate && isStreetView) {
-                            uniqueLocations.add(location)
-                            println("GameViewModel: StreetView-Location ${uniqueLocations.size}: ${location.city} (${location.country})")
-                        } else if (!isStreetView) {
-                            println("GameViewModel: Überspringe Fallback/Unsplash-Location: ${location.city}")
-                        } else {
-                            println("GameViewModel: Duplikat übersprungen: ${location.city}")
-                        }
+                    },
+                    onFailure = { error ->
+                        println("GameViewModel: Enhanced Locations fehlgeschlagen: ${error.message}")
+                        // Fallback zu bestehender Methode
+                        startSequentialLocationLoading()
                     }
-                    if (attempts < maxAttempts) {
-                        delay(200)
-                    }
-                }
-
-                if (uniqueLocations.size >= 5) {
-                    gameLocations.clear()
-                    gameLocations.addAll(uniqueLocations.take(5))
-                    println("GameViewModel: ✅ ${gameLocations.size} StreetView-Locations geladen")
-                } else {
-                    // Fallback: Fülle mit generierten Locations auf
-                    gameLocations.clear()
-                    gameLocations.addAll(uniqueLocations)
-                    val missingCount = 5 - uniqueLocations.size
-                    gameLocations.addAll(generateUniqueLocations(missingCount, uniqueLocations))
-                    println("GameViewModel: ⚠️ ${gameLocations.size} Locations (${uniqueLocations.size} StreetView, ${missingCount} generiert)")
-                }
-                usedLocationIds.clear()
+                )
 
             } catch (e: Exception) {
-                println("GameViewModel: Preloading-Fehler: ${e.message}, verwende Fallback")
-                createFallbackLocations()
+                println("GameViewModel: Enhanced Location-Preloading fehlgeschlagen: ${e.message}")
+                startSequentialLocationLoading()
             }
         }
+    }
+
+    // Fallback-Methode für sequenzielles Laden
+    private suspend fun startSequentialLocationLoading() {
+        val uniqueLocations = mutableListOf<LocationEntity>()
+        val maxAttempts = 12
+        var attempts = 0
+
+        while (uniqueLocations.size < 5 && attempts < maxAttempts) {
+            attempts++
+            val locationResult = locationRepository.getRandomLocation()
+            locationResult.getOrNull()?.let { location ->
+                // Prüfe auf Duplikate und Street View-URL
+                val isDuplicate = uniqueLocations.any { existing ->
+                    val latDiff = kotlin.math.abs(existing.latitude - location.latitude)
+                    val lngDiff = kotlin.math.abs(existing.longitude - location.longitude)
+                    latDiff < 0.001 && lngDiff < 0.001
+                }
+                val isStreetView = location.imageUrl.startsWith("https://maps.googleapis.com/maps/api/streetview") ||
+                                 location.imageUrl.contains("google.com/maps/embed/v1/streetview")
+
+                if (!isDuplicate && isStreetView) {
+                    uniqueLocations.add(location)
+                    println("GameViewModel: Sequenzielle Location ${uniqueLocations.size}: ${location.city} (${location.country})")
+                }
+            }
+            if (attempts < maxAttempts) {
+                delay(200)
+            }
+        }
+
+        if (uniqueLocations.size >= 5) {
+            gameLocations.clear()
+            gameLocations.addAll(uniqueLocations.take(5))
+            println("GameViewModel: ✅ ${gameLocations.size} Locations sequenziell geladen")
+        } else {
+            // Emergency fallback
+            createFallbackLocations()
+        }
+        usedLocationIds.clear()
     }
 
     fun startNewGame() {

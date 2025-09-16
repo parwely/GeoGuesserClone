@@ -7,7 +7,7 @@ console.log(
 );
 console.log("GOOGLE_MAPS_API_KEY:", process.env.GOOGLE_MAPS_API_KEY);
 
-const streetViewService = require("./src/services/streetViewService");
+const streetViewService = require("../src/services/streetViewService");
 
 // Check if the service constructor properly loads the API key
 console.log("Service API key:", streetViewService.apiKey);

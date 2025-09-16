@@ -218,3 +218,82 @@ data class HealthResponse(
     val uptime: Long,
     val database: String
 )
+
+// Erweiterte Street View Response für interaktive Features
+@Serializable
+data class InteractiveStreetViewResponse(
+    val success: Boolean,
+    val data: InteractiveStreetViewData
+)
+
+@Serializable
+data class InteractiveStreetViewData(
+    val location: StreetViewLocation,
+    val streetView: InteractiveStreetView
+)
+
+@Serializable
+data class InteractiveStreetView(
+    val type: String, // "interactive" or "static"
+    val embedUrl: String,
+    val staticFallback: String? = null,
+    val navigationEnabled: Boolean = true,
+    val quality: String = "high", // "low", "medium", "high"
+    val heading: Int? = null,
+    val pitch: Int? = null,
+    val zoom: Float? = null
+)
+
+// Navigation Request für dynamische Street View-Bewegung
+@Serializable
+data class StreetViewNavigationRequest(
+    val currentLat: Double,
+    val currentLng: Double,
+    val direction: String, // "forward", "backward", "left", "right"
+    val heading: Int,
+    val stepSize: Double = 25.0
+)
+
+@Serializable
+data class StreetViewNavigationResponse(
+    val success: Boolean,
+    val data: StreetViewNavigationData
+)
+
+@Serializable
+data class StreetViewNavigationData(
+    val newLocation: Coordinates,
+    val heading: Int,
+    val streetView: InteractiveStreetView,
+    val available: Boolean
+)
+
+// Enhanced Location Response mit eingebetteter Street View
+@Serializable
+data class EnhancedLocationResponse(
+    val success: Boolean,
+    val data: EnhancedLocationData
+)
+
+@Serializable
+data class EnhancedLocationData(
+    val count: Int,
+    val locations: List<EnhancedBackendLocation>
+)
+
+@Serializable
+data class EnhancedBackendLocation(
+    val id: Int,
+    val name: String? = null,
+    val country: String,
+    val city: String,
+    val coordinates: Coordinates,
+    val difficulty: Int,
+    val difficultyName: String,
+    val category: String,
+    val imageUrls: List<String> = emptyList(),
+    val hints: Map<String, String> = emptyMap(),
+    val viewCount: Int = 0,
+    val streetView: InteractiveStreetView? = null // NEW: Embedded Street View
+)
+
