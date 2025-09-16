@@ -85,14 +85,6 @@
             </PendingDiffInfo>
           </value>
         </entry>
-        <entry key="$PROJECT_DIR$/app/src/main/java/com/example/geogeusserclone/utils/EdgeToEdge.kt">
-          <value>
-            <PendingDiffInfo>
-              <option name="filePath" value="$PROJECT_DIR$/app/src/main/java/com/example/geogeusserclone/utils/EdgeToEdge.kt" />
-              <option name="updatedContent" value="package com.example.geogeusserclone.utils&#10;&#10;import androidx.activity.ComponentActivity&#10;import androidx.activity.enableEdgeToEdge as androidEnableEdgeToEdge&#10;&#10;fun ComponentActivity.enableEdgeToEdge() {&#10;    androidEnableEdgeToEdge()&#10;}" />
-            </PendingDiffInfo>
-          </value>
-        </entry>
         <entry key="$PROJECT_DIR$/app/src/main/java/com/example/geogeusserclone/utils/MapCacheManager.kt">
           <value>
             <PendingDiffInfo>

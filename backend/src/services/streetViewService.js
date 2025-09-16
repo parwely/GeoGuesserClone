@@ -29,12 +29,17 @@ class StreetViewService {
       throw new Error("Google Street View API key not configured");
     }
 
+    // KORREKTUR: Sichere Parameter-Validierung vor URL-Generierung
+    const safeHeading = this.sanitizeHeading(heading);
+    const safePitch = this.sanitizePitch(pitch);
+    const safeFov = this.sanitizeFov(fov);
+
     const params = new URLSearchParams({
       key: this.apiKey,
       location: `${lat},${lng}`,
-      heading: heading.toString(),
-      pitch: pitch.toString(),
-      fov: fov.toString(),
+      heading: safeHeading.toString(),
+      pitch: safePitch.toString(),
+      fov: safeFov.toString(),
       // Wichtig: Diese Parameter ermöglichen Navigation
       navigation: "1", // Ermöglicht Bewegung zwischen Street View-Punkten
       controls: "1", // Zeigt Navigationskontrollen
@@ -46,18 +51,68 @@ class StreetViewService {
   }
 
   /**
+   * KORREKTUR: Sichere Heading-Sanitization
+   */
+  sanitizeHeading(heading) {
+    if (typeof heading === "object" && heading !== null) {
+      // Falls ein Objekt übergeben wird, versuche heading-Property zu extrahieren
+      if (heading.heading !== undefined) {
+        return this.sanitizeHeading(heading.heading);
+      }
+      return 0; // Default fallback
+    }
+    if (typeof heading === "string") {
+      const parsed = parseInt(heading, 10);
+      return isNaN(parsed) ? 0 : ((parsed % 360) + 360) % 360;
+    }
+    if (typeof heading === "number") {
+      return ((Math.round(heading) % 360) + 360) % 360;
+    }
+    return 0; // Default fallback
+  }
+
+  /**
+   * KORREKTUR: Sichere Pitch-Sanitization
+   */
+  sanitizePitch(pitch) {
+    if (typeof pitch === "object" && pitch !== null) {
+      return 0; // Default für Objekte
+    }
+    const numPitch = typeof pitch === "string" ? parseFloat(pitch) : pitch;
+    if (isNaN(numPitch)) return 0;
+    return Math.max(-90, Math.min(90, numPitch)); // Clamp zwischen -90 und 90
+  }
+
+  /**
+   * KORREKTUR: Sichere FOV-Sanitization
+   */
+  sanitizeFov(fov) {
+    if (typeof fov === "object" && fov !== null) {
+      return 90; // Default für Objekte
+    }
+    const numFov = typeof fov === "string" ? parseFloat(fov) : fov;
+    if (isNaN(numFov)) return 90;
+    return Math.max(10, Math.min(120, numFov)); // Clamp zwischen 10 und 120
+  }
+
+  /**
    * NEW: Generiere Street View Konfiguration für native Integration
    */
   generateStreetViewConfig(lat, lng, heading = 0, pitch = 0, fov = 90) {
+    // KORREKTUR: Sichere Parameter-Validierung
+    const safeHeading = this.sanitizeHeading(heading);
+    const safePitch = this.sanitizePitch(pitch);
+    const safeFov = this.sanitizeFov(fov);
+
     return {
       type: "interactive_streetview",
       config: {
         position: { lat, lng },
         pov: {
-          heading: heading,
-          pitch: pitch,
+          heading: safeHeading, // ✅ KORRIGIERT: Direkt die Nummer, nicht Objekt
+          pitch: safePitch,
         },
-        zoom: fov <= 30 ? 3 : fov <= 60 ? 2 : 1,
+        zoom: safeFov <= 30 ? 3 : safeFov <= 60 ? 2 : 1,
         enableCloseButton: false,
         addressControl: false,
         linksControl: true, // Ermöglicht Navigation zu verbundenen Punkten
@@ -82,56 +137,67 @@ class StreetViewService {
     fov = 90,
     responsive = true
   ) {
+    // KORREKTUR: Sichere Parameter-Validierung
+    const safeHeading = this.sanitizeHeading(heading);
+    const safePitch = this.sanitizePitch(pitch);
+    const safeFov = this.sanitizeFov(fov);
+
     const embedUrl = this.generateInteractiveStreetViewUrl(
       lat,
       lng,
-      heading,
-      pitch,
-      fov
+      safeHeading,
+      safePitch,
+      safeFov
     );
-    const config = this.generateStreetViewConfig(lat, lng, heading, pitch, fov);
+    const config = this.generateStreetViewConfig(
+      lat,
+      lng,
+      safeHeading,
+      safePitch,
+      safeFov
+    );
 
     if (responsive) {
       return {
         // Für WebView/Iframe (einfachste Lösung)
         embedUrl: embedUrl,
 
-        // Für native Google Maps Integration (erweiterte Lösung)
-        nativeConfig: config,
+        // KORREKTUR: nativeConfig als JSON String serialisieren
+        nativeConfig: JSON.stringify(config),
 
         // Responsive URLs für verschiedene Geräte
         responsive: {
           mobile: this.generateInteractiveStreetViewUrl(
             lat,
             lng,
-            heading,
-            pitch,
-            fov
+            safeHeading,
+            safePitch,
+            safeFov
           ),
           tablet: this.generateInteractiveStreetViewUrl(
             lat,
             lng,
-            heading,
-            pitch,
-            fov
+            safeHeading,
+            safePitch,
+            safeFov
           ),
           desktop: this.generateInteractiveStreetViewUrl(
             lat,
             lng,
-            heading,
-            pitch,
-            fov
+            safeHeading,
+            safePitch,
+            safeFov
           ),
         },
 
         // Fallback für statische Bilder (falls Interactive fehlschlägt)
-        fallback: `${this.baseUrl}?size=640x640&location=${lat},${lng}&heading=${heading}&pitch=${pitch}&fov=${fov}&key=${this.apiKey}`,
+        fallback: `${this.baseUrl}?size=640x640&location=${lat},${lng}&heading=${safeHeading}&pitch=${safePitch}&fov=${safeFov}&key=${this.apiKey}`,
       };
     }
 
     return {
       embedUrl: embedUrl,
-      nativeConfig: config,
+      nativeConfig: JSON.stringify(config),
     };
   }
 

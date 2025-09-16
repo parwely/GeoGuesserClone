@@ -5,16 +5,18 @@ import com.example.geogeusserclone.data.database.entities.LocationEntity
 import com.example.geogeusserclone.data.network.ApiRetryHandler
 import com.example.geogeusserclone.data.network.ApiService
 import com.example.geogeusserclone.data.network.MapillaryApiService
+import com.example.geogeusserclone.data.network.InteractiveStreetViewResponse
+import com.example.geogeusserclone.data.network.StreetViewNavigationResponse
+import com.example.geogeusserclone.data.network.StreetViewNavigationRequest
+import com.example.geogeusserclone.data.network.InteractiveStreetView
 import com.example.geogeusserclone.utils.Constants
+import com.example.geogeusserclone.utils.DistanceCalculator
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.Flow
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonPrimitive
 import java.util.*
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.math.*
 
 @Singleton
 class LocationRepository @Inject constructor(
@@ -184,9 +186,40 @@ class LocationRepository @Inject constructor(
         backendLocation: com.example.geogeusserclone.data.network.BackendLocation,
         prefix: String
     ): Result<LocationEntity> {
-        // Street View URL robust extrahieren
+        // NEUE: Prüfe geografische Street View-Verfügbarkeit ZUERST
+        val isLikelyAvailable = isLocationLikelyToHaveStreetView(
+            backendLocation.coordinates.latitude,
+            backendLocation.coordinates.longitude,
+            backendLocation.city,
+            backendLocation.country
+        )
+
+        if (!isLikelyAvailable) {
+            println("LocationRepository: ⚠️ ${backendLocation.city} wahrscheinlich ohne Street View, verwende sofort Fallback")
+            val fallbackUrl = getKnownLocationFallback(backendLocation)
+                ?: getRegionalFallbackImage(backendLocation)
+
+            val locationEntity = LocationEntity(
+                id = "${prefix}_${backendLocation.id}_${System.currentTimeMillis()}",
+                latitude = backendLocation.coordinates.latitude,
+                longitude = backendLocation.coordinates.longitude,
+                imageUrl = fallbackUrl,
+                country = backendLocation.country,
+                city = backendLocation.city,
+                difficulty = backendLocation.difficulty,
+                isCached = true,
+                isUsed = false
+            )
+
+            println("LocationRepository: ✅ LocationEntity erstellt für ${locationEntity.city} mit URL-Typ: Smart Fallback")
+            locationDao.insertLocation(locationEntity)
+            addToCache(locationEntity)
+            return Result.success(locationEntity)
+        }
+
+        // KORRIGIERT: Robuste Street View URL-Validierung mit Backend-Priorität
         val streetViewUrl = try {
-            withTimeout(1500L) {
+            withTimeout(3000L) {
                 val streetViewResponse = apiService.getStreetView(
                     locationId = backendLocation.id,
                     heading = (0..359).random(),
@@ -195,54 +228,83 @@ class LocationRepository @Inject constructor(
 
                 if (streetViewResponse.isSuccessful && streetViewResponse.body()?.success == true) {
                     val data = streetViewResponse.body()!!.data
-                    // Robust extrahieren: Prüfe alle möglichen Felder
-                    val raw = data.streetViewUrlsRaw
-                    val legacyMap = data.streetViewUrls
-                    val urlFromRaw = raw?.let { jsonObj ->
-                        var found: String? = null
-                        for (key in listOf("tablet", "desktop", "mobile")) {
-                            val value = jsonObj[key]
-                            if (value is JsonPrimitive && value.isString) {
-                                found = value.contentOrNull
-                                if (found != null) break
-                            }
-                        }
-                        found
-                    }
-                    val urlFromLegacy = legacyMap?.let { map ->
-                        var found: String? = null
-                        for (key in listOf("tablet", "desktop", "mobile")) {
-                            val value = map[key]
-                            if (value != null && value is String) {
-                                found = value
-                                break
-                            }
-                        }
-                        found
-                    }
-                    val url = urlFromRaw
-                        ?: urlFromLegacy
-                        ?: data.streetViewUrl
+                    println("LocationRepository: ✅ StreetView API Response erfolgreich")
 
-                    println("LocationRepository: StreetView API URL (robust): $url")
-                    url
+                    // KORRIGIERT: Backend-URLs haben Priorität - verwende sie direkt wenn verfügbar
+                    val extractedUrl = data.streetView?.embedUrl?.let { url ->
+                        if (url.contains("[object Object]")) {
+                            println("LocationRepository: ⚠️ URL korrumpiert: ${url.take(100)}...")
+                            null
+                        } else {
+                            // NEUE: Verbesserte URL-Validierung
+                            if (isUrlSafeAndValid(url)) {
+                                println("LocationRepository: ✅ Backend liefert gültige Street View URL für ${backendLocation.city}")
+                                url
+                            } else {
+                                println("LocationRepository: ⚠️ Street View URL wahrscheinlich ungültig für ${backendLocation.city}")
+                                null
+                            }
+                        }
+                    }
+
+                    // VERBESSERT: Fallback zu statischer URL mit zusätzlicher Validierung
+                    val validatedUrl = extractedUrl ?: data.streetView?.fallback?.let { fallback ->
+                        if (!fallback.contains("[object Object]") && fallback.isNotBlank()) {
+                            if (isUrlSafeAndValid(fallback)) {
+                                println("LocationRepository: ✅ Backend liefert gültige Fallback URL")
+                                fallback
+                            } else {
+                                println("LocationRepository: ⚠️ Fallback URL wahrscheinlich ungültig")
+                                null
+                            }
+                        } else {
+                            null
+                        }
+                    }
+
+                    validatedUrl
                 } else {
-                    println("LocationRepository: StreetView API fehlgeschlagen, nutze imageUrls")
+                    println("LocationRepository: ❌ StreetView API Response nicht erfolgreich: ${streetViewResponse.code()}")
                     null
                 }
             }
         } catch (e: Exception) {
-            println("LocationRepository: StreetView API Exception: ${e.message}")
+            println("LocationRepository: ❌ StreetView API Exception: ${e.message}")
             null
-        } ?: backendLocation.imageUrls.firstOrNull().also {
-            println("LocationRepository: Fallback imageUrl: $it")
-        } ?: ""
+        }
+
+        // KORRIGIERT: Nur bei Backend-Ausfall verwende Fallbacks
+        val finalUrl = streetViewUrl ?: run {
+            println("LocationRepository: 🔧 Backend Street View nicht verfügbar für ${backendLocation.city}, verwende Fallback")
+
+            // Intelligente Fallback-Strategie
+            val knownLocationUrl = getKnownLocationFallback(backendLocation)
+            if (knownLocationUrl != null) {
+                println("LocationRepository: 🏛️ Bekannte Location Fallback: ${backendLocation.city}")
+                knownLocationUrl
+            } else {
+                // Prüfe Backend imageUrls
+                if (backendLocation.imageUrls.isNotEmpty()) {
+                    val firstImageUrl = backendLocation.imageUrls.first()
+                    if (firstImageUrl.isNotBlank() && !firstImageUrl.contains("PLACEHOLDER")) {
+                        println("LocationRepository: 🖼️ Verwende Backend imageUrl: ${firstImageUrl.take(50)}...")
+                        firstImageUrl
+                    } else {
+                        println("LocationRepository: 🌍 Verwende regionalen Fallback")
+                        getRegionalFallbackImage(backendLocation)
+                    }
+                } else {
+                    println("LocationRepository: 🌍 Verwende regionalen Fallback")
+                    getRegionalFallbackImage(backendLocation)
+                }
+            }
+        }
 
         val locationEntity = LocationEntity(
             id = "${prefix}_${backendLocation.id}_${System.currentTimeMillis()}",
             latitude = backendLocation.coordinates.latitude,
             longitude = backendLocation.coordinates.longitude,
-            imageUrl = streetViewUrl,
+            imageUrl = finalUrl,
             country = backendLocation.country,
             city = backendLocation.city,
             difficulty = backendLocation.difficulty,
@@ -250,10 +312,17 @@ class LocationRepository @Inject constructor(
             isUsed = false
         )
 
-        println("LocationRepository: Final LocationEntity imageUrl: ${locationEntity.imageUrl}")
+        println("LocationRepository: ✅ LocationEntity erstellt für ${locationEntity.city} mit URL-Typ: ${
+            when {
+                finalUrl.contains("google.com/maps/embed") -> "Interactive Street View"
+                finalUrl.contains("maps.googleapis.com/maps/api/streetview") -> "Static Street View"
+                finalUrl.contains("unsplash.com") || finalUrl.contains("images.") -> "Fallback Image"
+                else -> "Unknown"
+            }
+        }")
+
         locationDao.insertLocation(locationEntity)
         addToCache(locationEntity)
-        println("LocationRepository: ✅ Backend-Location erfolgreich erstellt: ${locationEntity.city}")
         return Result.success(locationEntity)
     }
 
@@ -544,38 +613,40 @@ class LocationRepository @Inject constructor(
         streetViewQuality: String = "high"
     ): Result<List<LocationEntity>> {
         return try {
-            val response = apiService.getEnhancedRandomLocations(
-                count = count,
-                difficulty = difficulty,
-                category = category,
-                includeStreetView = true,
-                streetViewQuality = streetViewQuality
-            )
+            // KORRIGIERT: Enhanced API gibt es nicht - verwende Standard API
+            println("LocationRepository: Enhanced API nicht verfügbar, nutze Standard-Fallback")
 
-            if (response.isSuccessful && response.body()?.success == true) {
-                val locations = response.body()!!.data.locations.map { enhancedLocation ->
-                    LocationEntity(
-                        id = enhancedLocation.id.toString(),
-                        latitude = enhancedLocation.coordinates.latitude,
-                        longitude = enhancedLocation.coordinates.longitude,
-                        imageUrl = enhancedLocation.streetView?.embedUrl ?: enhancedLocation.imageUrls.firstOrNull() ?: "",
-                        country = enhancedLocation.country,
-                        city = enhancedLocation.city,
-                        difficulty = enhancedLocation.difficulty,
-                        isCached = true,
-                        isUsed = false
-                    )
+            // Verwende bestehende optimierte Backend-Suche
+            val backendResult = getLocationFromBackendOptimized()
+            if (backendResult.isSuccess) {
+                val singleLocation = backendResult.getOrNull()!!
+                // Generiere weitere Locations durch sequenzielle Calls
+                val allLocations = mutableListOf(singleLocation)
+
+                repeat(count - 1) {
+                    delay(200) // Rate limiting
+                    val additionalResult = getLocationFromBackendOptimized()
+                    additionalResult.getOrNull()?.let { location ->
+                        allLocations.add(location)
+                    }
                 }
 
-                // Cache locations
-                locationDao.insertLocations(locations)
-                Result.success(locations)
+                println("LocationRepository: ✅ ${allLocations.size} Locations über Standard-API geladen")
+                Result.success(allLocations)
             } else {
-                Result.failure(Exception("Keine erweiterten Locations verfügbar"))
+                // Fallback zu lokalen Locations
+                val localLocations = (1..count).map {
+                    val location = generateUniqueLocation()
+                    locationDao.insertLocation(location)
+                    location
+                }
+
+                println("LocationRepository: ✅ ${localLocations.size} lokale Fallback-Locations generiert")
+                Result.success(localLocations)
             }
         } catch (e: Exception) {
             // Fallback to existing method
-            println("LocationRepository: Enhanced locations failed, using fallback")
+            println("LocationRepository: Enhanced locations failed: ${e.message}, using fallback")
             (1..count).map { getRandomLocation() }
                 .mapNotNull { it.getOrNull() }
                 .let { locations ->
@@ -604,6 +675,163 @@ class LocationRepository @Inject constructor(
             }
         } catch (e: Exception) {
             Result.failure(e)
+        }
+    }
+
+    // ÜBERARBEITETE: Weniger restriktive Street View-Verfügbarkeitsprüfung
+    private fun isLocationLikelyToHaveStreetView(
+        lat: Double,
+        lng: Double,
+        city: String,
+        country: String
+    ): Boolean {
+        val cityLower = city.lowercase()
+        val countryLower = country.lowercase()
+
+        // 1. NUR absolute No-Go-Zonen (sehr konservativ)
+        val absoluteNoStreetView = listOf(
+            "antarctica", "arctic ocean", "deep sahara", "deep gobi", "middle of pacific"
+        )
+
+        for (noGo in absoluteNoStreetView) {
+            if (cityLower.contains(noGo) || countryLower.contains(noGo)) {
+                println("LocationRepository: ❌ Absolute No-Go Zone erkannt: $noGo")
+                return false
+            }
+        }
+
+        // 2. Nur extreme geografische Bereiche ausschließen
+        when {
+            // Nur extreme Antarktis (südlich von -75°)
+            lat < -75.0 -> {
+                println("LocationRepository: ❌ Extreme Antarktis: $lat")
+                return false
+            }
+            // Nur extreme Arktis (nördlich von 80°)
+            lat > 80.0 -> {
+                println("LocationRepository: ❌ Extreme Arktis: $lat")
+                return false
+            }
+            // Nur definitiv mitten im tiefen Ozean
+            isDefinitelyInDeepOcean(lat, lng) -> {
+                println("LocationRepository: ❌ Mitten im tiefen Ozean")
+                return false
+            }
+        }
+
+        // 3. OPTIMISTISCHE STANDARDANNAHME: Fast überall gibt es Street View
+        println("LocationRepository: ✅ Location $cityLower wahrscheinlich Street View verfügbar")
+        return true
+    }
+
+    // VERBESSERTE: Viel weniger restriktive URL-Validierung
+    private fun isUrlSafeAndValid(url: String): Boolean {
+        try {
+            // 1. Nur wirklich kritische Probleme prüfen
+            if (url.contains("[object Object]") || url.contains("undefined")) {
+                println("LocationRepository: ❌ URL enthält korrupte Daten")
+                return false
+            }
+
+            if (url.isBlank()) {
+                println("LocationRepository: ❌ URL ist leer")
+                return false
+            }
+
+            // 2. Für Google URLs: Basis API-Key Validierung
+            if (url.contains("google.com") || url.contains("googleapis.com")) {
+                if (!url.contains("key=AIza")) {
+                    println("LocationRepository: ❌ Google URL ohne API-Key")
+                    return false
+                }
+            }
+
+            // 3. Nur extreme URL-Längen ausschließen
+            if (url.length > 8192) { // Sehr großzügiges Limit
+                println("LocationRepository: ❌ URL extrem lang (${url.length} Zeichen)")
+                return false
+            }
+
+            // 4. Nur ungültige Koordinatenbereiche prüfen
+            if (url.contains("location=") && hasInvalidCoordinates(url)) {
+                println("LocationRepository: ❌ Ungültige Koordinaten in URL")
+                return false
+            }
+
+            // 5. OPTIMISTISCHE STANDARDANNAHME: URL ist gültig
+            return true
+
+        } catch (e: Exception) {
+            println("LocationRepository: ⚠️ URL-Validierung Fehler (erlaubt trotzdem): ${e.message}")
+            return true // Bei Unklarheit: erlauben
+        }
+    }
+
+    // Hilfsmethode für Koordinatenvalidierung
+    private fun hasInvalidCoordinates(url: String): Boolean {
+        return try {
+            val locationPattern = Regex("location=([^&]+)")
+            val match = locationPattern.find(url) ?: return false
+
+            val coordString = match.groupValues[1]
+            val coords = coordString.split(",", "%2C")
+
+            if (coords.size >= 2) {
+                val lat = coords[0].toDoubleOrNull() ?: return false
+                val lng = coords[1].toDoubleOrNull() ?: return false
+
+                // Nur offensichtlich ungültige Koordinaten
+                return lat < -90.0 || lat > 90.0 || lng < -180.0 || lng > 180.0
+            }
+
+            false
+        } catch (e: Exception) {
+            false // Bei Fehlern: als gültig betrachten
+        }
+    }
+
+    // Sehr konservative Deep Ocean Detection
+    private fun isDefinitelyInDeepOcean(lat: Double, lng: Double): Boolean {
+        return when {
+            // Nur die allertiefsten Ozean-Bereiche, weit weg von Land
+            (lat > -5.0 && lat < 5.0 && lng > 160.0 && lng < -150.0) -> true // Mitte des Pazifiks
+            (lat > -5.0 && lat < 5.0 && lng > -40.0 && lng < -20.0) -> true // Mitte des Atlantiks
+            (lat > -10.0 && lat < 0.0 && lng > 80.0 && lng < 100.0) -> true // Mitte des Indischen Ozeans
+            else -> false
+        }
+    }
+
+    // Fallback-Methoden für bekannte Locations
+    private fun getKnownLocationFallback(location: com.example.geogeusserclone.data.network.BackendLocation): String? {
+        val cityName = location.city.lowercase()
+        val countryName = location.country.lowercase()
+
+        return when {
+            cityName.contains("paris") -> "https://images.unsplash.com/photo-1502602898536-47ad22581b52?w=800&h=600&fit=crop"
+            cityName.contains("london") -> "https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=800&h=600&fit=crop"
+            cityName.contains("new york") -> "https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=800&h=600&fit=crop"
+            cityName.contains("tokyo") -> "https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=800&h=600&fit=crop"
+            cityName.contains("berlin") -> "https://images.unsplash.com/photo-1587330979470-3016b6702d89?w=800&h=600&fit=crop"
+            cityName.contains("sydney") -> "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&h=600&fit=crop"
+            cityName.contains("rome") -> "https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=800&h=600&fit=crop"
+            else -> null
+        }
+    }
+
+    // Regionale Fallback-Images
+    private fun getRegionalFallbackImage(location: com.example.geogeusserclone.data.network.BackendLocation): String {
+        val countryName = location.country.lowercase()
+
+        return when {
+            countryName.contains("france") -> "https://images.unsplash.com/photo-1502602898536-47ad22581b52?w=800&h=600&fit=crop"
+            countryName.contains("united kingdom") -> "https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=800&h=600&fit=crop"
+            countryName.contains("united states") || countryName.contains("usa") -> "https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=800&h=600&fit=crop"
+            countryName.contains("germany") -> "https://images.unsplash.com/photo-1587330979470-3016b6702d89?w=800&h=600&fit=crop"
+            countryName.contains("japan") -> "https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=800&h=600&fit=crop"
+            countryName.contains("australia") -> "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&h=600&fit=crop"
+            countryName.contains("italy") -> "https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=800&h=600&fit=crop"
+            countryName.contains("spain") -> "https://images.unsplash.com/photo-1539037116277-4db20889f2d4?w=800&h=600&fit=crop"
+            else -> "https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=800&h=600&fit=crop"
         }
     }
 }

@@ -70,25 +70,76 @@ fun InteractiveStreetView(
     }
 
     // Debounced Street View URL - KORRIGIERT: Verwende nur Backend-URLs
+    // KORRIGIERT: Robuste URL-Verarbeitung mit Debug-Logging
     val streetViewUrl = remember(imageUrl) {
-        // SICHERHEIT: Verwende NIEMALS clientseitige Street View URL Generation!
-        // Alle URLs müssen vom Backend kommen
-        imageUrl
+        println("InteractiveStreetView: Verarbeite URL: ${imageUrl.take(100)}...")
+        when {
+            // Prüfe auf gültige Google Maps Embed URLs
+            imageUrl.contains("google.com/maps/embed/v1/streetview") &&
+            !imageUrl.contains("[object Object]") -> {
+                println("InteractiveStreetView: ✅ Gültige Interactive Street View URL")
+                imageUrl
+            }
+
+            // Prüfe auf gültige statische Street View URLs
+            imageUrl.startsWith("https://maps.googleapis.com/maps/api/streetview") &&
+            !imageUrl.contains("[object Object]") &&
+            !imageUrl.contains("PLACEHOLDER_API_KEY") -> {
+                println("InteractiveStreetView: ✅ Gültige Static Street View URL")
+                imageUrl
+            }
+
+            // Fallback Bilder (Unsplash etc.)
+            imageUrl.contains("unsplash.com") || imageUrl.contains("images.") -> {
+                println("InteractiveStreetView: 🖼️ Fallback-Bild URL")
+                imageUrl
+            }
+
+            // Leere oder korrupte URLs
+            imageUrl.isBlank() || imageUrl.contains("[object Object]") -> {
+                println("InteractiveStreetView: ❌ Korrupte/leere URL, verwende Fallback")
+                "https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=800&h=600&fit=crop"
+            }
+
+            else -> {
+                println("InteractiveStreetView: ❓ Unbekannter URL-Typ: ${imageUrl.take(50)}...")
+                imageUrl
+            }
+        }
     }
 
-    // Image Painter with optimized settings
+    // KORRIGIERT: Image Painter mit erweiterten Einstellungen und Fehlerbehandlung
     val painter = rememberAsyncImagePainter(
         model = ImageRequest.Builder(context)
             .data(streetViewUrl)
-            .size(Size.ORIGINAL)
             .crossfade(300)
             .memoryCachePolicy(coil.request.CachePolicy.ENABLED)
             .diskCachePolicy(coil.request.CachePolicy.ENABLED)
+            // KORRIGIERT: Fehlerbehandlung für Street View URLs
+            .error(android.R.drawable.ic_menu_report_image) // Fallback bei Fehlern
+            .placeholder(android.R.drawable.ic_menu_gallery) // Placeholder während Laden
             .build()
     )
 
-    // Get current state safely
+    // KORRIGIERT: Erweiterte State-Behandlung mit Debug-Logging
     val painterState = painter.state
+
+    LaunchedEffect(painterState) {
+        when (painterState) {
+            is AsyncImagePainter.State.Loading -> {
+                println("InteractiveStreetView: 🔄 Lade Bild...")
+            }
+            is AsyncImagePainter.State.Success -> {
+                println("InteractiveStreetView: ✅ Bild erfolgreich geladen")
+            }
+            is AsyncImagePainter.State.Error -> {
+                println("InteractiveStreetView: ❌ Fehler beim Bildladen: ${painterState.result.throwable.message}")
+            }
+            else -> {
+                println("InteractiveStreetView: ⏳ Leerer State")
+            }
+        }
+    }
 
     Box(modifier = modifier.fillMaxSize()) {
         when (painterState) {

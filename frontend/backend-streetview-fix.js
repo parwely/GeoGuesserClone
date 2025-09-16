@@ -1,277 +1,154 @@
-// Backend Street View Service - Interaktive URLs statt statische Bilder
-// Ersetze die bestehende streetViewService.js Implementierung
+// KORRIGIERTER Backend-Code für Street View URL-Generierung
+// Problem: [object Object] in URLs statt echte Heading-Werte
 
-class InteractiveStreetViewService {
-    constructor(apiKey) {
-        this.apiKey = apiKey;
+// Vorher (DEFEKT):
+const streetViewResponse = {
+  embedUrl: `https://www.google.com/maps/embed/v1/streetview?key=${API_KEY}&location=${lat}%2C${lng}&heading=${heading}&pitch=0&fov=90&navigation=1&controls=1&zoom=1&fullscreen=1`,
+  nativeConfig: {
+    type: "interactive_streetview",
+    config: {
+      position: { lat, lng },
+      pov: {
+        heading: { heading, zoom: null, fallbackType: "static" }, // ❌ FEHLER: Objekt statt Nummer
+        pitch: 0
+      },
+      // ...
     }
+  }
+};
 
-    /**
-     * Generiert eine interaktive Street View URL für WebView/Iframe
-     * @param {number} lat - Latitude
-     * @param {number} lng - Longitude
-     * @param {number} heading - Heading in Grad (0-359)
-     * @param {number} pitch - Pitch in Grad (-90 bis 90)
-     * @param {number} fov - Field of View (10-100)
-     * @returns {string} Interaktive Street View URL
-     */
-    generateInteractiveStreetViewUrl(lat, lng, heading = 0, pitch = 0, fov = 90) {
-        // LÖSUNG: Verwende Google Street View Embed API statt Static API
-        const baseUrl = 'https://www.google.com/maps/embed/v1/streetview';
-
-        const params = new URLSearchParams({
-            key: this.apiKey,
-            location: `${lat},${lng}`,
-            heading: heading.toString(),
-            pitch: pitch.toString(),
-            fov: fov.toString(),
-            // Wichtig: Diese Parameter ermöglichen Navigation
-            navigation: '1',  // Ermöglicht Bewegung zwischen Street View-Punkten
-            controls: '1',    // Zeigt Navigationskontrollen
-            zoom: '1',        // Ermöglicht Zoom
-            fullscreen: '1'   // Vollbild-Option
-        });
-
-        return `${baseUrl}?${params.toString()}`;
-    }
-
-    /**
-     * Alternative: Generiere JavaScript-Code für native Google Maps Street View
-     * Für erweiterte Integration
-     */
-    generateStreetViewConfig(lat, lng, heading = 0, pitch = 0, fov = 90) {
-        return {
-            type: 'interactive_streetview',
-            config: {
-                position: { lat, lng },
-                pov: {
-                    heading: heading,
-                    pitch: pitch
-                },
-                zoom: fov <= 30 ? 3 : (fov <= 60 ? 2 : 1),
-                enableCloseButton: false,
-                addressControl: false,
-                linksControl: true,     // Ermöglicht Navigation zu verbundenen Punkten
-                panControl: true,       // Pan-Kontrollen
-                zoomControl: true,      // Zoom-Kontrollen
-                fullscreenControl: true,
-                motionTracking: false,
-                motionTrackingControl: false
-            },
-            apiKey: this.apiKey
-        };
-    }
-
-    /**
-     * Hybrid-Ansatz: Sowohl Embed-URL als auch Config bereitstellen
-     */
-    generateStreetViewResponse(lat, lng, heading = 0, pitch = 0, fov = 90, responsive = true) {
-        const embedUrl = this.generateInteractiveStreetViewUrl(lat, lng, heading, pitch, fov);
-        const config = this.generateStreetViewConfig(lat, lng, heading, pitch, fov);
-
-        if (responsive) {
-            return {
-                // Für WebView/Iframe (einfachste Lösung)
-                embedUrl: embedUrl,
-
-                // Für native Google Maps Integration (erweiterte Lösung)
-                nativeConfig: config,
-
-                // Responsive URLs für verschiedene Geräte
-                responsive: {
-                    mobile: this.generateInteractiveStreetViewUrl(lat, lng, heading, pitch, fov),
-                    tablet: this.generateInteractiveStreetViewUrl(lat, lng, heading, pitch, fov),
-                    desktop: this.generateInteractiveStreetViewUrl(lat, lng, heading, pitch, fov)
-                },
-
-                // Fallback für statische Bilder (falls Interactive fehlschlägt)
-                fallback: `https://maps.googleapis.com/maps/api/streetview?size=640x640&location=${lat},${lng}&heading=${heading}&pitch=${pitch}&fov=${fov}&key=${this.apiKey}`
-            };
-        }
-
-        return {
-            embedUrl: embedUrl,
-            nativeConfig: config
-        };
-    }
-
-    /**
-     * Prüft ob Street View an einem Ort verfügbar ist
-     */
-    async checkStreetViewAvailability(lat, lng) {
-        try {
-            // Verwende Street View Service API für Verfügbarkeitsprüfung
-            const url = `https://maps.googleapis.com/maps/api/streetview/metadata?location=${lat},${lng}&key=${this.apiKey}`;
-            const response = await fetch(url);
-            const data = await response.json();
-
-            return {
-                available: data.status === 'OK',
-                location: data.location,
-                panoId: data.pano_id,
-                date: data.date
-            };
-        } catch (error) {
-            console.error('Street View availability check failed:', error);
-            return { available: false };
-        }
-    }
-}
-
-// Integration in bestehende API-Routen
-const streetViewService = new InteractiveStreetViewService(process.env.GOOGLE_MAPS_API_KEY);
-
-// Aktualisierte API-Endpunkte
+// KORRIGIERT (FUNKTIONAL):
 app.get('/api/locations/:id/streetview', async (req, res) => {
-    try {
-        const { id } = req.params;
-        const {
-            heading = Math.floor(Math.random() * 360),
-            pitch = 0,
-            fov = 90,
-            multiple = false,
-            responsive = true
-        } = req.query;
+  try {
+    const { id } = req.params;
+    const { heading = 0, multiple = false, responsive = false } = req.query;
 
-        // Hole Location aus Datenbank
-        const location = await getLocationById(id);
+    // KORREKTUR 1: Heading als Nummer extrahieren
+    const numericHeading = parseInt(heading, 10) || 0;
 
-        if (!location) {
-            return res.status(404).json({
-                success: false,
-                error: 'Location nicht gefunden'
-            });
-        }
+    // KORREKTUR 2: Sichere URL-Generierung
+    const generateStreetViewUrl = (lat, lng, heading, params = {}) => {
+      const baseUrl = 'https://www.google.com/maps/embed/v1/streetview';
+      const urlParams = new URLSearchParams({
+        key: process.env.GOOGLE_MAPS_API_KEY || 'AIzaSyD4C5oyZ4ya-sYGKIDqoRa1C3Mqjl22eUc',
+        location: `${lat},${lng}`,
+        heading: heading.toString(), // ✅ KORRIGIERT: Explizite String-Konvertierung
+        pitch: '0',
+        fov: '90',
+        navigation: '1',
+        controls: '1',
+        zoom: '1',
+        fullscreen: '1',
+        ...params
+      });
+      return `${baseUrl}?${urlParams.toString()}`;
+    };
 
-        // Prüfe Street View Verfügbarkeit
-        const availability = await streetViewService.checkStreetViewAvailability(
-            location.coordinates.latitude,
-            location.coordinates.longitude
-        );
+    const generateStaticUrl = (lat, lng, heading, size = '640x640') => {
+      const baseUrl = 'https://maps.googleapis.com/maps/api/streetview';
+      const urlParams = new URLSearchParams({
+        size,
+        location: `${lat},${lng}`,
+        heading: heading.toString(), // ✅ KORRIGIERT
+        pitch: '0',
+        fov: '90',
+        key: process.env.GOOGLE_MAPS_API_KEY || 'AIzaSyD4C5oyZ4ya-sYGKIDqoRa1C3Mqjl22eUc'
+      });
+      return `${baseUrl}?${urlParams.toString()}`;
+    };
 
-        if (!availability.available) {
-            return res.status(404).json({
-                success: false,
-                error: 'Street View nicht verfügbar',
-                fallback: true
-            });
-        }
-
-        // Generiere interaktive Street View Response
-        const streetViewData = streetViewService.generateStreetViewResponse(
-            location.coordinates.latitude,
-            location.coordinates.longitude,
-            parseInt(heading),
-            parseInt(pitch),
-            parseInt(fov),
-            responsive === 'true'
-        );
-
-        res.json({
-            success: true,
-            data: {
-                location: {
-                    id: location.id,
-                    coordinates: location.coordinates
-                },
-                // NEUE STRUKTUR: Interaktive URLs statt statische
-                interactiveStreetView: streetViewData,
-
-                // Legacy-Support für bestehende Clients
-                streetViewUrls: streetViewData.responsive || {
-                    mobile: streetViewData.embedUrl,
-                    tablet: streetViewData.embedUrl,
-                    desktop: streetViewData.embedUrl
-                }
-            }
-        });
-
-    } catch (error) {
-        console.error('Street View API Error:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Interner Server-Fehler'
-        });
+    // Location aus Database laden
+    const location = await Location.findById(id);
+    if (!location) {
+      return res.status(404).json({
+        success: false,
+        error: 'Location not found'
+      });
     }
+
+    const { latitude, longitude } = location.coordinates;
+
+    // KORREKTUR 3: Saubere Response-Struktur
+    const streetViewResponse = {
+      success: true,
+      data: {
+        location: {
+          id: location.id,
+          name: location.name,
+          coordinates: {
+            latitude,
+            longitude
+          }
+        },
+        streetView: {
+          embedUrl: generateStreetViewUrl(latitude, longitude, numericHeading),
+
+          // KORREKTUR 4: nativeConfig als String serialisieren (nicht Objekt)
+          nativeConfig: JSON.stringify({
+            type: "interactive_streetview",
+            config: {
+              position: { lat: latitude, lng: longitude },
+              pov: {
+                heading: numericHeading, // ✅ KORRIGIERT: Direkt die Nummer, nicht Objekt
+                pitch: 0
+              },
+              zoom: 1,
+              enableCloseButton: false,
+              addressControl: false,
+              linksControl: true,
+              panControl: true,
+              zoomControl: true,
+              fullscreenControl: true,
+              motionTracking: false,
+              motionTrackingControl: false
+            },
+            apiKey: process.env.GOOGLE_MAPS_API_KEY || 'AIzaSyD4C5oyZ4ya-sYGKIDqoRa1C3Mqjl22eUc'
+          }),
+
+          // KORREKTUR 5: Responsive URLs mit korrekten Headings
+          responsive: responsive ? {
+            mobile: generateStreetViewUrl(latitude, longitude, numericHeading, { fov: '110' }),
+            tablet: generateStreetViewUrl(latitude, longitude, numericHeading, { fov: '100' }),
+            desktop: generateStreetViewUrl(latitude, longitude, numericHeading, { fov: '90' })
+          } : undefined,
+
+          // KORREKTUR 6: Fallback Static URL
+          fallback: generateStaticUrl(latitude, longitude, numericHeading)
+        }
+      }
+    };
+
+    res.json(streetViewResponse);
+
+  } catch (error) {
+    console.error('Street View API Error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+      details: error.message
+    });
+  }
 });
 
-// Neuer Endpunkt für dynamische Navigation
-app.post('/api/streetview/navigate', async (req, res) => {
-    try {
-        const {
-            currentLat,
-            currentLng,
-            direction, // 'forward', 'backward', 'left', 'right'
-            heading,
-            stepSize = 25
-        } = req.body;
+// ZUSÄTZLICHE KORREKTUR: Fehlerbehandlung für korrupte Heading-Werte
+const sanitizeHeading = (heading) => {
+  if (typeof heading === 'object') {
+    // Falls ein Objekt übergeben wird, versuche heading-Property zu extrahieren
+    return parseInt(heading.heading, 10) || 0;
+  }
+  if (typeof heading === 'string') {
+    // Parse String zu Number
+    const parsed = parseInt(heading, 10);
+    return isNaN(parsed) ? 0 : parsed;
+  }
+  if (typeof heading === 'number') {
+    return Math.round(heading) % 360;
+  }
+  return 0; // Default fallback
+};
 
-        // Berechne neue Position basierend auf Richtung
-        let newHeading = heading;
-        let newLat = currentLat;
-        let newLng = currentLng;
-
-        switch (direction) {
-            case 'forward':
-                // Bewege in aktuelle Blickrichtung
-                const forwardRad = (heading * Math.PI) / 180;
-                newLat += (Math.cos(forwardRad) * stepSize) / 111000;
-                newLng += (Math.sin(forwardRad) * stepSize) / (111000 * Math.cos((currentLat * Math.PI) / 180));
-                break;
-
-            case 'backward':
-                // Bewege rückwärts
-                const backwardRad = ((heading + 180) * Math.PI) / 180;
-                newLat += (Math.cos(backwardRad) * stepSize) / 111000;
-                newLng += (Math.sin(backwardRad) * stepSize) / (111000 * Math.cos((currentLat * Math.PI) / 180));
-                break;
-
-            case 'left':
-                newHeading = (heading - 90 + 360) % 360;
-                break;
-
-            case 'right':
-                newHeading = (heading + 90) % 360;
-                break;
-        }
-
-        // Prüfe ob neue Position gültig ist
-        const availability = await streetViewService.checkStreetViewAvailability(newLat, newLng);
-
-        if (!availability.available) {
-            return res.status(404).json({
-                success: false,
-                error: 'Street View an neuer Position nicht verfügbar'
-            });
-        }
-
-        // Generiere neue interaktive Street View URL
-        const streetViewData = streetViewService.generateStreetViewResponse(
-            newLat,
-            newLng,
-            newHeading
-        );
-
-        res.json({
-            success: true,
-            data: {
-                newLocation: {
-                    latitude: newLat,
-                    longitude: newLng
-                },
-                heading: newHeading,
-                interactiveStreetView: streetViewData,
-                available: true
-            }
-        });
-
-    } catch (error) {
-        console.error('Street View Navigation Error:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Navigation fehlgeschlagen'
-        });
-    }
-});
-
-module.exports = { InteractiveStreetViewService, streetViewService };
+// VALIDATE & TEST URLs:
+const testUrl = generateStreetViewUrl(-33.890542, 151.274856, 233);
+console.log('Test URL:', testUrl);
+// Sollte sein: https://www.google.com/maps/embed/v1/streetview?key=...&location=-33.890542%2C151.274856&heading=233&...
+// NICHT: ...&heading=%5Bobject+Object%5D&...

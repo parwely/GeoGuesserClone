@@ -1,10 +1,6 @@
 package com.example.geogeusserclone.data.network
 
-import kotlinx.serialization.Contextual
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.jsonPrimitive
 
 // Authentication Request Classes
 @Serializable
@@ -97,7 +93,7 @@ data class BackendLocation(
     val difficultyName: String,
     val category: String,
     val imageUrls: List<String> = emptyList(),
-    val hints: Map<String, String> = emptyMap(), // Changed from Any to String
+    val hints: Map<String, String> = emptyMap(),
     val viewCount: Int = 0
 )
 
@@ -116,9 +112,20 @@ data class StreetViewResponse(
 @Serializable
 data class StreetViewData(
     val location: StreetViewLocation,
+    // Neue Backend-Felder (primär)
+    val streetView: BackendStreetViewData? = null,
+    // Legacy-Felder (fallback) - KORRIGIERT: Verwende nur Gson-kompatible Typen
     val streetViewUrl: String? = null,
-    val streetViewUrls: Map<String, String>? = null, // Legacy
-    @Contextual val streetViewUrlsRaw: JsonObject? = null // NEU: Rohdaten für gemischte Typen
+    val streetViewUrls: Map<String, String>? = null
+)
+
+@Serializable
+data class BackendStreetViewData(
+    val embedUrl: String,
+    // KORRIGIERT: Verwende String statt JsonElement für bessere Kompatibilität
+    val nativeConfig: String? = null,
+    val responsive: Map<String, String>? = null,
+    val fallback: String? = null
 )
 
 @Serializable
@@ -219,6 +226,65 @@ data class HealthResponse(
     val database: String
 )
 
+// Zusätzliche Response-Klassen für API-Endpunkte
+@Serializable
+data class StreetViewAvailabilityResponse(
+    val success: Boolean,
+    val streetViewAvailable: Boolean
+)
+
+@Serializable
+data class LocationDistanceResponse(
+    val success: Boolean,
+    val distance: DistanceData
+)
+
+@Serializable
+data class DistanceData(
+    val distanceKm: Double,
+    val distanceMiles: Double
+)
+
+// Session Models (falls benötigt)
+@Serializable
+data class SessionCreateRequest(
+    val mode: String,
+    val settings: Map<String, String>
+)
+
+@Serializable
+data class SessionCreateResponse(
+    val success: Boolean,
+    val sessionId: String,
+    val settings: Map<String, String>
+)
+
+@Serializable
+data class SessionJoinRequest(
+    val sessionId: String
+)
+
+@Serializable
+data class SessionJoinResponse(
+    val success: Boolean,
+    val sessionId: String,
+    val players: List<PlayerInfo>
+)
+
+@Serializable
+data class SessionInfoResponse(
+    val success: Boolean,
+    val sessionId: String,
+    val status: String,
+    val players: List<PlayerInfo>
+)
+
+@Serializable
+data class PlayerInfo(
+    val userId: String,
+    val username: String
+)
+
 // Erweiterte Street View Response für interaktive Features
 @Serializable
 data class InteractiveStreetViewResponse(
@@ -296,4 +362,3 @@ data class EnhancedBackendLocation(
     val viewCount: Int = 0,
     val streetView: InteractiveStreetView? = null // NEW: Embedded Street View
 )
-

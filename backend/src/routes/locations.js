@@ -326,16 +326,19 @@ router.get("/:id/streetview", async (req, res) => {
     const location = await locationService.getLocationById(parseInt(id));
 
     if (interactive === "true" || interactive === true) {
-      // Generate interactive Street View response
+      // KORREKTUR: Sichere Parameter-Extraktion
+      const numericHeading = heading ? parseInt(heading, 10) : 0;
+      const numericZoom = zoom ? parseFloat(zoom) : 1;
+
+      // KORREKTUR: Separate Parameter statt Objekt übergeben
       const streetViewResponse =
         await streetViewService.generateStreetViewResponse(
           location.coordinates.latitude,
           location.coordinates.longitude,
-          {
-            heading: heading ? parseInt(heading) : null,
-            zoom: zoom ? parseFloat(zoom) : null,
-            fallbackType: fallbackType,
-          }
+          numericHeading, // ✅ KORRIGIERT: Direkte Nummer
+          0, // pitch
+          90, // fov
+          true // responsive
         );
 
       const response = {
@@ -561,18 +564,18 @@ router.get("/:id/streetview/interactive", async (req, res) => {
 
     const location = await locationService.getLocationById(parseInt(id));
 
-    // Generate comprehensive interactive Street View data
-    const interactiveResponse =
-      await streetViewService.generateInteractiveStreetViewUrl(
-        location.coordinates.latitude,
-        location.coordinates.longitude,
-        {
-          heading: heading ? parseInt(heading) : null,
-          zoom: zoom ? parseFloat(zoom) : 1,
-          enableNavigation: enableNavigation === "true",
-          quality: quality,
-        }
-      );
+    // KORREKTUR: Sichere Parameter-Extraktion
+    const numericHeading = heading ? parseInt(heading, 10) : 0;
+    const numericZoom = zoom ? parseFloat(zoom) : 1;
+
+    // KORREKTUR: Separate Parameter statt Objekt übergeben
+    const embedUrl = await streetViewService.generateInteractiveStreetViewUrl(
+      location.coordinates.latitude,
+      location.coordinates.longitude,
+      numericHeading, // ✅ KORRIGIERT: Direkte Nummer
+      0, // pitch
+      90 // fov
+    );
 
     const response = {
       success: true,
@@ -583,11 +586,29 @@ router.get("/:id/streetview/interactive", async (req, res) => {
           coordinates: location.coordinates,
         },
         interactive: {
-          embedUrl: interactiveResponse.embedUrl,
-          navigationEnabled: interactiveResponse.navigationEnabled,
-          controls: interactiveResponse.controls,
-          configuration: interactiveResponse.configuration,
-          fallback: interactiveResponse.fallback,
+          embedUrl: embedUrl,
+          navigationEnabled:
+            enableNavigation === "true" || enableNavigation === true,
+          controls: {
+            pan: true,
+            zoom: true,
+            compass: true,
+            streetViewControls: true,
+          },
+          configuration: {
+            heading: numericHeading,
+            zoom: numericZoom,
+            quality: quality,
+          },
+          fallback: {
+            staticUrl: `https://maps.googleapis.com/maps/api/streetview?size=640x640&location=${
+              location.coordinates.latitude
+            },${location.coordinates.longitude}&heading=${numericHeading}&key=${
+              process.env.GOOGLE_STREETVIEW_API_KEY ||
+              "AIzaSyD4C5oyZ4ya-sYGKIDqoRa1C3Mqjl22eUc"
+            }`,
+            reason: "backup",
+          },
         },
         metadata: {
           quality: quality,

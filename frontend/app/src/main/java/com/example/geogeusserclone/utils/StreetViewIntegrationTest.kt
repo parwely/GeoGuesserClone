@@ -3,7 +3,6 @@ package com.example.geogeusserclone.utils
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -329,7 +328,7 @@ private fun TestResultCard(result: StreetViewIntegrationTest.TestResult) {
             verticalAlignment = Alignment.Top
         ) {
             Icon(
-                if (result.success) Icons.Default.CheckCircle else Icons.Default.Error,
+                if (result.success) Icons.Default.CheckCircle else Icons.Default.Warning,
                 contentDescription = null,
                 tint = if (result.success) Color.Green else Color.Red,
                 modifier = Modifier.size(24.dp)
