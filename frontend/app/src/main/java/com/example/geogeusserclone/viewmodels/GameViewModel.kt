@@ -280,7 +280,14 @@ class GameViewModel @Inject constructor(
 
                     // Prüfe Street View Verfügbarkeit
                     val streetViewAvailable = withContext(Dispatchers.IO) {
-                        locationRepository.isStreetViewAvailable(nextLocation.id)
+                        // Prüfe direkt die URL, falls ID nicht numerisch ist
+                        val isValidStreetViewUrl = nextLocation.imageUrl.startsWith("https://maps.googleapis.com/maps/api/streetview") &&
+                            Regex("key=AIza[\\w-]+", RegexOption.IGNORE_CASE).containsMatchIn(nextLocation.imageUrl)
+                        if (isValidStreetViewUrl) {
+                            true
+                        } else {
+                            locationRepository.isStreetViewAvailable(nextLocation.id)
+                        }
                     }
 
                     _uiState.update { state ->
