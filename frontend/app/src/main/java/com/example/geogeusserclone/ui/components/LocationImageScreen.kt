@@ -1,5 +1,14 @@
 package com.example.geogeusserclone.ui.components
 
+import android.R
+import android.graphics.Bitmap
+import android.net.http.SslError
+import android.webkit.ConsoleMessage
+import android.webkit.PermissionRequest
+import android.webkit.SslErrorHandler
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -20,9 +29,11 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.webkit.WebSettings
 import coil.compose.AsyncImage
+import coil.request.CachePolicy
 import coil.request.ImageRequest
 import com.example.geogeusserclone.data.database.entities.LocationEntity
 import com.example.geogeusserclone.utils.MemoryManager
+import java.net.URLDecoder
 import java.util.Locale
 
 @Composable
@@ -113,10 +124,10 @@ fun LocationImageScreen(
                     model = ImageRequest.Builder(LocalContext.current)
                         .data(cleanedUrl)
                         .crossfade(300)
-                        .memoryCachePolicy(coil.request.CachePolicy.ENABLED)
-                        .diskCachePolicy(coil.request.CachePolicy.ENABLED)
-                        .error(android.R.drawable.ic_menu_report_image)
-                        .placeholder(android.R.drawable.ic_menu_gallery)
+                        .memoryCachePolicy(CachePolicy.ENABLED)
+                        .diskCachePolicy(CachePolicy.ENABLED)
+                        .error(R.drawable.ic_menu_report_image)
+                        .placeholder(R.drawable.ic_menu_gallery)
                         .build(),
                     contentDescription = "Static Street View",
                     contentScale = ContentScale.Crop,
@@ -374,8 +385,8 @@ private fun FallbackImageView(
             model = ImageRequest.Builder(LocalContext.current)
                 .data(imageUrl)
                 .crossfade(300)
-                .memoryCachePolicy(coil.request.CachePolicy.ENABLED)
-                .diskCachePolicy(coil.request.CachePolicy.ENABLED)
+                .memoryCachePolicy(CachePolicy.ENABLED)
+                .diskCachePolicy(CachePolicy.ENABLED)
                 .build(),
             contentDescription = "Fallback für $locationName",
             contentScale = ContentScale.Crop,
@@ -763,7 +774,7 @@ private fun hasValidLocationParameter(url: String): Boolean {
     try {
         val locationMatch = Regex("location=([^&]+)").find(url) ?: return false
         val locationParam = locationMatch.groupValues[1]
-        val decodedLocation = java.net.URLDecoder.decode(locationParam, "UTF-8")
+        val decodedLocation = URLDecoder.decode(locationParam, "UTF-8")
         val coords = decodedLocation.split(",")
 
         if (coords.size == 2) {
@@ -780,81 +791,53 @@ private fun hasValidLocationParameter(url: String): Boolean {
 }
 
 // NEUE: Performance-optimierte WebView-Komponente
-// NEUE: Prüfe ob URL gültigen location Parameter hat - KORRIGIERT für dekodierte URLs
+@Composable
 private fun OptimizedWebView(
     url: String,
-        // KRITISCH: Dekodiere URL zuerst, dann validiere
-        val decodedUrl = decodeUrlParameters(url)
-        val locationMatch = Regex("location=([^&]+)").find(decodedUrl) ?: return false
+    locationName: String,
     onError: (String) -> Unit,
-
-        // Nach Dekodierung sollten wir normale Kommas haben, nicht %2C
-        val coords = locationParam.split(",")
+    modifier: Modifier = Modifier
+) {
     var isWebViewReady by remember { mutableStateOf(false) }
     var loadingProgress by remember { mutableIntStateOf(0) }
     var hasPerformedValidation by remember { mutableStateOf(false) }
     var validationAttempts by remember { mutableIntStateOf(0) }
-            val isValid = lat != null && lng != null &&
+
     AndroidView(
         factory = { context ->
-
-            println("LocationImageScreen: 🔍 Location validation: lat=$lat, lng=$lng, valid=$isValid")
-            return isValid
             WebView(context).apply {
-
-        println("LocationImageScreen: ❌ Location Parameter hat nicht genau 2 Koordinaten: ${coords.size}")
                 // KRITISCH: Performance-optimierte Einstellungen mit API-Call-Prevention
                 settings.apply {
-        println("LocationImageScreen: ❌ Fehler bei Location Parameter Validierung: ${e.message}")
-                    // JavaScript und DOM
                     javaScriptEnabled = true
                     javaScriptCanOpenWindowsAutomatically = false
                     domStorageEnabled = true
                     @Suppress("DEPRECATION")
                     databaseEnabled = false
-
-                    // NEUE: Verhindere automatische Resource-Loading die API-Calls auslösen könnten
-                    loadsImagesAutomatically = false // Verhindert automatisches Bildladen
-                    blockNetworkImage = true // Blockiert Netzwerk-Bilder initial
-                    blockNetworkLoads = false // Erlaubt hauptsächliche URL aber nicht Subresources
-
-                    // Rendering-Optimierungen
+                    loadsImagesAutomatically = false
+                    blockNetworkImage = true
+                    blockNetworkLoads = false
                     loadWithOverviewMode = true
                     useWideViewPort = true
                     setSupportZoom(false)
                     builtInZoomControls = false
                     displayZoomControls = false
-
-                    // KRITISCH: Hardware-Beschleunigung und Performance
-                    mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW // Strengere Sicherheit
-                    mediaPlaybackRequiresUserGesture = true // Verhindert automatische Media-Requests
+                    mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                    mediaPlaybackRequiresUserGesture = true
                     allowFileAccess = false
                     allowContentAccess = false
                     @Suppress("DEPRECATION")
                     allowUniversalAccessFromFileURLs = false
                     @Suppress("DEPRECATION")
                     allowFileAccessFromFileURLs = false
-
-                    // NEUE: Anti-API-Call Einstellungen
-                    setGeolocationEnabled(false) // Verhindert Geolocation-API-Calls
-                    javaScriptCanOpenWindowsAutomatically = false // Verhindert Popup-API-Calls
-                    setSupportMultipleWindows(false) // Verhindert zusätzliche Windows/Tabs
-
-                    // KRITISCH: Cache-Verhalten um wiederholte API-Calls zu vermeiden
+                    setGeolocationEnabled(false)
+                    setSupportMultipleWindows(false)
                     cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
-
                     userAgentString = "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0 Mobile Safari/537.36"
-
-                    // ENTFERNT: Deprecated setRenderPriority and non-existent setAppCacheEnabled
-                    // Diese Methoden existieren nicht mehr in modernen Android-Versionen
                 }
-
-                // KORRIGIERT: Hochoptimierte WebViewClient mit besserer Timing-Kontrolle
                 webViewClient = object : WebViewClient() {
                     private var errorCount = 0
                     private val maxErrors = 3
                     private var pageStartTime = 0L
-
                     override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
                         return when {
                             url?.startsWith("https://www.google.com/maps") == true -> false
@@ -864,164 +847,115 @@ private fun OptimizedWebView(
                             url?.startsWith("https://streetviewpixels") == true -> false
                             url?.contains("google.com") == true -> false
                             else -> {
-                                println("LocationImageScreen: 🚫 Blockiere externe URL: ${url?.take(50)}")
+                                println("LocationImageScreen: 🚫 Blockiere externe URL: "+(url?.take(50) ?: ""))
                                 true
                             }
                         }
                     }
-
-                    override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
+                    override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                         super.onPageStarted(view, url, favicon)
                         isWebViewReady = false
                         loadingProgress = 0
                         hasPerformedValidation = false
                         validationAttempts = 0
                         pageStartTime = System.currentTimeMillis()
-
                         if (url?.contains("streetview") == true) {
                             println("LocationImageScreen: 🔄 Lade Street View für $locationName")
                         }
                     }
-
                     override fun onPageFinished(view: WebView?, url: String?) {
                         super.onPageFinished(view, url)
-
                         if (url?.contains("streetview") == true) {
                             val loadTime = System.currentTimeMillis() - pageStartTime
                             println("LocationImageScreen: ✅ Street View Basis-Laden abgeschlossen für $locationName (${loadTime}ms)")
-
-                            // KRITISCH: Warte länger bevor JavaScript-Validierung
                             view?.postDelayed({
                                 if (!hasPerformedValidation && validationAttempts < 2) {
                                     performDelayedValidation(view, onError)
                                 }
-                            }, 4000) // 4 Sekunden warten statt 2
+                            }, 4000)
                         }
                     }
-
                     override fun onReceivedError(view: WebView?, errorCode: Int, description: String?, failingUrl: String?) {
                         super.onReceivedError(view, errorCode, description, failingUrl)
-
                         errorCount++
                         if (errorCount >= maxErrors) {
                             println("LocationImageScreen: 🔧 Zu viele WebView Fehler ($errorCount), wechsle zu Fallback")
                             onError("Wiederholt WebView Fehler: $description")
                         }
                     }
-
-                    override fun onReceivedHttpError(view: WebView?, request: android.webkit.WebResourceRequest?, errorResponse: android.webkit.WebResourceResponse?) {
+                    override fun onReceivedHttpError(view: WebView?, request: WebResourceRequest?, errorResponse: WebResourceResponse?) {
                         super.onReceivedHttpError(view, request, errorResponse)
                         val statusCode = errorResponse?.statusCode
                         val requestUrl = request?.url.toString()
-
-                        // KRITISCH: Bei HTTP 400 "Missing location parameter" sofort zu Fallback wechseln
                         if (statusCode == 400 && requestUrl.contains("streetview")) {
                             println("LocationImageScreen: 🔧 HTTP 400 'Missing location parameter' - sofortiger Fallback für $locationName")
                             onError("HTTP 400: Location Parameter fehlt - verwende Fallback-Bild")
                             return
                         }
-
-                        // Andere kritische HTTP-Fehler für Street View URLs
                         if ((statusCode == 403 || statusCode == 404) &&
                             requestUrl.contains("streetview") &&
                             requestUrl.contains("google.com/maps/embed") &&
                             !requestUrl.contains("favicon")) {
-
                             println("LocationImageScreen: 🔧 HTTP $statusCode für $locationName, wechsle zu Fallback")
                             onError("HTTP $statusCode: Street View nicht verfügbar")
                         }
                     }
-
-                    override fun onReceivedSslError(view: WebView?, handler: android.webkit.SslErrorHandler?, error: android.net.http.SslError?) {
+                    override fun onReceivedSslError(view: WebView?, handler: SslErrorHandler?, error: SslError?) {
                         handler?.proceed()
                     }
-
-                    // NEUE: Separate Validierungsfunktion mit verbessertem Timing
                     private fun performDelayedValidation(webView: WebView, onErrorCallback: (String) -> Unit) {
                         hasPerformedValidation = true
                         validationAttempts++
-
                         println("LocationImageScreen: 🔍 Starte verzögerte Validierung (Versuch $validationAttempts)")
-
-                        // KRITISCH: Vorsichtige JavaScript-Validierung ohne DOM-Queries die API-Calls auslösen könnten
                         webView.evaluateJavascript("""
                             (function() {
                                 try {
-                                    // KEINE DOM-Queries die neue API-Calls triggern könnten
                                     var bodyText = document.body ? document.body.innerText.toLowerCase() : '';
                                     var bodyHtml = document.body ? document.body.innerHTML.toLowerCase() : '';
-                                    
-                                    console.log('Validation check - Body text length: ' + bodyText.length);
-                                    console.log('Validation check - Body HTML length: ' + bodyHtml.length);
-                                    
-                                    // KRITISCH: Prüfe zuerst auf explizite Fehlermeldungen
                                     if (bodyText.includes('invalid request') && bodyText.includes('missing')) {
-                                        console.log('❌ Explicit error detected: Invalid request missing parameter');
                                         return 'explicit_error_detected';
                                     }
-                                    
                                     if (bodyText.includes('rejected') && bodyText.includes('request')) {
-                                        console.log('❌ Request rejected detected');
                                         return 'request_rejected';
                                     }
-                                    
-                                    // SICHER: Prüfe nur HTML-Content, KEINE DOM-Queries
                                     var hasStreetViewIndicators = bodyHtml.includes('streetview') ||
                                                                  bodyHtml.includes('street-view') ||
                                                                  bodyHtml.includes('maps-embed') ||
-                                                                 bodyHtml.includes('google') && bodyHtml.includes('maps');
-                                    
+                                                                 (bodyHtml.includes('google') && bodyHtml.includes('maps'));
                                     if (hasStreetViewIndicators) {
-                                        console.log('✅ Street View content indicators found');
                                         return 'streetview_success';
                                     }
-                                    
-                                    // NEUE: Wenn Seite nicht leer ist, aber keine klaren Indikatoren
                                     if (bodyText.length > 50 || bodyHtml.length > 200) {
-                                        console.log('⚠️ Content present but unclear - assume OK');
                                         return 'content_present_assume_ok';
                                     }
-                                    
-                                    console.log('❓ No clear content indicators');
                                     return 'no_clear_indicators';
-                                    
                                 } catch (innerError) {
-                                    console.log('JavaScript inner error: ' + innerError.message);
                                     return 'js_inner_error';
                                 }
                             })();
                         """) { result ->
-                            println("LocationImageScreen: 📱 Verzögerte Validierung für $locationName: $result")
-
                             when {
                                 result?.contains("explicit_error_detected") == true -> {
-                                    println("LocationImageScreen: 🔧 Expliziter Google Maps Fehler erkannt - sofortiger Fallback")
                                     onErrorCallback("Google Maps: Explizite Fehlermeldung erkannt")
                                 }
                                 result?.contains("request_rejected") == true -> {
-                                    println("LocationImageScreen: 🔧 Request rejected erkannt - sofortiger Fallback")
                                     onErrorCallback("Google Maps: Request wurde abgelehnt")
                                 }
                                 result?.contains("streetview_success") == true -> {
-                                    println("LocationImageScreen: ✅ Street View Content erfolgreich validiert")
                                     isWebViewReady = true
                                 }
                                 result?.contains("content_present_assume_ok") == true -> {
-                                    println("LocationImageScreen: ✅ Content vorhanden - optimistisch als OK betrachtet")
                                     isWebViewReady = true
                                 }
                                 result?.contains("js_") == true -> {
-                                    println("LocationImageScreen: ⚠️ JavaScript Fehler - aber erlauben trotzdem")
-                                    isWebViewReady = true // Bei JS-Fehlern optimistisch sein
+                                    isWebViewReady = true
                                 }
                                 else -> {
-                                    println("LocationImageScreen: ⏳ Validierung unschlüssig - versuche erneut wenn möglich")
                                     if (validationAttempts < 2) {
                                         webView.postDelayed({
                                             performDelayedValidation(webView, onErrorCallback)
                                         }, 3000)
                                     } else {
-                                        println("LocationImageScreen: ✅ Max Validierungsversuche erreicht - erlaube Anzeige")
                                         isWebViewReady = true
                                     }
                                 }
@@ -1029,40 +963,26 @@ private fun OptimizedWebView(
                         }
                     }
                 }
-
-                // NEUE: Hochoptimierte WebChromeClient
-                webChromeClient = object : android.webkit.WebChromeClient() {
+                webChromeClient = object : WebChromeClient() {
                     override fun onProgressChanged(view: WebView?, newProgress: Int) {
                         super.onProgressChanged(view, newProgress)
                         loadingProgress = newProgress
-
-                        // Nur bei wichtigen Meilensteinen loggen
                         if (newProgress == 100) {
-                            println("LocationImageScreen: 📊 $locationName Street View: $newProgress%")
                             isWebViewReady = true
                         }
                     }
-
-                    override fun onPermissionRequest(request: android.webkit.PermissionRequest?) {
+                    override fun onPermissionRequest(request: PermissionRequest?) {
                         request?.deny()
                     }
-
-                    override fun onConsoleMessage(consoleMessage: android.webkit.ConsoleMessage?): Boolean {
+                    override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
                         val message = consoleMessage?.message() ?: ""
-
-                        // KORRIGIERT: Filtern nach tatsächlich wichtigen Fehlern
                         if (message.contains("Invalid request", ignoreCase = true) &&
                             message.contains("missing", ignoreCase = true)) {
-                            println("LocationImageScreen: 🚨 KRITISCHER JS Fehler: ${message.take(100)}")
                             onError("JavaScript: $message")
-                        } else if (message.contains("Error") || message.contains("Failed")) {
-                            println("LocationImageScreen: 📱 JS: ${message.take(100)}")
                         }
                         return true
                     }
                 }
-
-                // KRITISCH: URL nur EINMAL laden
                 try {
                     val headers = mapOf(
                         "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -1070,23 +990,19 @@ private fun OptimizedWebView(
                         "Cache-Control" to "max-age=300",
                         "Connection" to "keep-alive"
                     )
-
                     loadUrl(url, headers)
                 } catch (e: Exception) {
-                    println("LocationImageScreen: ❌ Fehler beim Laden der URL: ${e.message}")
                     onError("URL-Ladefehler: ${e.message}")
                 }
             }
         },
         modifier = modifier,
         update = { webView ->
-            // Verhindere unnötige Updates
             if (!isWebViewReady && loadingProgress < 100) {
                 // WebView ist noch am Laden - keine Updates
             }
         }
     )
-
     // NEUE: Loading Overlay nur bei langsamen Verbindungen
     if (loadingProgress < 100 && loadingProgress > 0) {
         Box(
