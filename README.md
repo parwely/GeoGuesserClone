@@ -4,7 +4,7 @@
 
 **Target Specifications:**
 - Android 8.0+ (API Level 26+)
-- 5 concurrent users maximum
+- ca. 5 concurrent users maximum
 - $0/month operational cost
 - Hybrid offline/online functionality
 - Direct APK distribution
@@ -22,31 +22,21 @@
 
 ### Backend (Node.js)
 - **Runtime:** Node.js + Express.js
-- **Database:** PostgreSQL with PostGIS extension
+- **Database:** Neon PostgreSQL with PostGIS extension
 - **Real-time:** Socket.IO server
 - **Authentication:** JWT + bcrypt
 - **API Design:** RESTful + WebSocket
 
-### Infrastructure (Free Tier)
-- **Hosting:** Vercel (Serverless Functions)
-- **Database:** Neon PostgreSQL (500MB free tier)
-- **Storage:** Vercel Blob for images
-- **Domain:** Vercel subdomain (.vercel.app)
-
-### Map Solutions?
-- **Primary**: OpenStreetMap mit Leaflet WebView
-- **Alternative**: Mapbox SDK (50k kostenlose Map Loads)
+### Map and StreetView SOlution
+-  **Primary** Google Street View Embed Linkns for Street View, Static if First Fails
+- **Alternative**: Mapillary semi 
 - **Fallback**: Custom Bitmap-Weltkarte
-- **Tiles**: Vorgeladene OSM-Tiles in Assets
 
 ### Image Sources
-- **Wikimedia Commons**: Geotagged Photos
 - **Mapillary API**: Street-level Imagery (kostenlos)
 - **Custom Collection**: Eigene GPS-markierte Fotos
-- **Asset Bundle**: Vorinstallierte Bildsammlung
 
 ### UI/UX Libraries
 - **Material Design**: Android Material Components
 - **Image Loading**: Glide
-- **Charts & Statistics**: MPAndroidChart
-- **Maps**: OSMDroid oder WebView mit Leaflet
+
