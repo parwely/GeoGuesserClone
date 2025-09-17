@@ -581,311 +581,123 @@ private fun getDifficultyText(difficulty: Int): String {
 
 // NEUE: Hilfsfunktionen für URL-Validierung und Fallback-Strategien
 private fun isUrlSafeToLoad(url: String): Boolean {
+    println("LocationImageScreen: 🔍 Validiere URL-Sicherheit: ${url.take(100)}...")
+
     return when {
-        // Basis-Checks
-        url.contains("[object Object]") -> false
-        url.contains("PLACEHOLDER_API_KEY") -> false
-        url.isBlank() -> false
+        // Nur kritische Ausschlüsse - viel weniger restriktiv
+        url.contains("[object Object]") -> {
+            println("LocationImageScreen: ❌ URL enthält [object Object]")
+            false
+        }
+        url.contains("PLACEHOLDER_API_KEY") -> {
+            println("LocationImageScreen: ❌ URL enthält Placeholder API Key")
+            false
+        }
+        url.isBlank() -> {
+            println("LocationImageScreen: ❌ URL ist leer")
+            false
+        }
 
-        // Google Maps URLs sollten gültige API-Keys haben
-        url.contains("google.com/maps/embed") && !url.contains("key=AIza") -> false
+        // OPTIMISTISCHE VALIDIERUNG: Nur offensichtlich kaputte URLs ablehnen
+        url.contains("undefined") -> {
+            println("LocationImageScreen: ❌ URL enthält 'undefined'")
+            false
+        }
 
-        // URL sollte nicht zu lang sein (HTTP 400 Prevention)
-        url.length > 2048 -> false
+        // WICHTIG: Google Maps URLs sind fast immer gültig - sehr liberal validieren
+        url.contains("google.com/maps") -> {
+            println("LocationImageScreen: ✅ Google Maps URL - lade direkt")
+            true
+        }
 
-        // Bekannte problematische Koordinaten prüfen
-        isUrlContainingProblematicCoordinates(url) -> false
+        url.contains("googleapis.com") -> {
+            println("LocationImageScreen: ✅ Google APIs URL - lade direkt")
+            true
+        }
 
-        else -> true
-    }
-}
-
-private fun isUrlContainingProblematicCoordinates(url: String): Boolean {
-    // Extrahiere Koordinaten aus URL
-    val locationPattern = Regex("location=([^&]+)")
-    val match = locationPattern.find(url)
-
-    if (match != null) {
-        val coordString = match.groupValues[1]
-        val coords = coordString.split(",", "%2C")
-
-        if (coords.size >= 2) {
-            val lat = coords[0].toDoubleOrNull()
-            val lng = coords[1].toDoubleOrNull()
-
-            if (lat != null && lng != null) {
-                // Bekannte problematische Koordinaten die HTTP 400 verursachen
-                val problematicAreas = listOf(
-                    // Central Park problematische Bereiche
-                    Pair(40.785091, -73.968285),
-                    // Copacabana Beach
-                    Pair(-22.971177, -43.182543),
-                    // Bondi Beach
-                    Pair(-33.890542, 151.274856)
-                )
-
-                for ((problemLat, problemLng) in problematicAreas) {
-                    val distance = calculateSimpleDistance(lat, lng, problemLat, problemLng)
-                    if (distance < 0.05) { // Weniger als 50m
-                        return true
-                    }
-                }
-            }
+        // Alle anderen URLs sind erstmal OK
+        else -> {
+            println("LocationImageScreen: ✅ URL scheint sicher")
+            true
         }
     }
-
-    return false
 }
 
-private fun calculateSimpleDistance(lat1: Double, lng1: Double, lat2: Double, lng2: Double): Double {
-    val earthRadius = 6371.0 // Earth radius in kilometers
-    val dLat = Math.toRadians(lat2 - lat1)
-    val dLng = Math.toRadians(lng2 - lng1)
-    val a = kotlin.math.sin(dLat / 2) * kotlin.math.sin(dLat / 2) +
-            kotlin.math.cos(Math.toRadians(lat1)) * kotlin.math.cos(Math.toRadians(lat2)) *
-            kotlin.math.sin(dLng / 2) * kotlin.math.sin(dLng / 2)
-    val c = 2 * kotlin.math.atan2(kotlin.math.sqrt(a), kotlin.math.sqrt(1 - a))
-    return earthRadius * c
+// NEUE: Smarte Koordinaten-Validierung - nur extreme Fälle abfangen
+private fun isUrlContainingProblematicCoordinates(url: String): Boolean {
+    return try {
+        // Nur extreme Koordinaten ausschließen (Pole, mitten im Ozean)
+        val locationPattern = Regex("location=([^&%]+)")
+        val match = locationPattern.find(url) ?: return false
+
+        val coordString = match.groupValues[1].replace("%2C", ",")
+        val coords = coordString.split(",")
+
+        if (coords.size >= 2) {
+            val lat = coords[0].toDoubleOrNull() ?: return false
+            val lng = coords[1].toDoubleOrNull() ?: return false
+
+            // NUR extreme No-Go Bereiche - sehr konservativ
+            when {
+                lat < -85.0 || lat > 85.0 -> true // Extreme Pole
+                (lat > -5.0 && lat < 5.0 && lng > 160.0 && lng < -150.0) -> true // Mitte Pazifik
+                else -> false // Alles andere ist OK
+            }
+        } else false
+    } catch (e: Exception) {
+        false // Bei Parsing-Fehlern: URL als OK betrachten
+    }
 }
 
+// VERBESSERTE: Fallback-Generierung nur wenn wirklich nötig
 private fun generateLocationFallbackUrl(location: LocationEntity): String {
-    // Intelligente Fallback-Strategie basierend auf Location-Daten
+    println("LocationImageScreen: 🔧 Generiere Fallback für ${location.city}")
+
+    // 1. Erste Priorität: Bekannte gute Locations
     val cityName = location.city?.lowercase() ?: ""
     val countryName = location.country?.lowercase() ?: ""
 
+    val knownLocationUrl = when {
+        cityName.contains("miami") -> "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&h=600&fit=crop"
+        cityName.contains("death valley") -> "https://images.unsplash.com/photo-1559827260-dc66d52bef19?w=800&h=600&fit=crop"
+        cityName.contains("new york") -> "https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=800&h=600&fit=crop"
+        cityName.contains("london") -> "https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=800&h=600&fit=crop"
+        cityName.contains("paris") -> "https://images.unsplash.com/photo-1502602898536-47ad22581b52?w=800&h=600&fit=crop"
+        cityName.contains("tokyo") -> "https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=800&h=600&fit=crop"
+        else -> null
+    }
+
+    if (knownLocationUrl != null) {
+        println("LocationImageScreen: 🏛️ Verwende bekannte Location URL")
+        return knownLocationUrl
+    }
+
+    // 2. Regionale Fallbacks
+    return generateRegionalFallbackUrl(location)
+}
+
+// VERBESSERTE: Regionale Fallback-URLs
+private fun generateRegionalFallbackUrl(location: LocationEntity): String {
+    val countryName = location.country?.lowercase() ?: ""
+
     return when {
-        // Bekannte Städte mit hochwertigen Fallback-Bildern
-        cityName.contains("new york") || cityName.contains("manhattan") ->
-            "https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=800&h=600&fit=crop"
-
-        cityName.contains("london") ->
-            "https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=800&h=600&fit=crop"
-
-        cityName.contains("paris") ->
-            "https://images.unsplash.com/photo-1502602898536-47ad22581b52?w=800&h=600&fit=crop"
-
-        cityName.contains("tokyo") ->
-            "https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=800&h=600&fit=crop"
-
-        cityName.contains("berlin") ->
-            "https://images.unsplash.com/photo-1587330979470-3016b6702d89?w=800&h=600&fit=crop"
-
-        cityName.contains("sydney") ->
-            "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&h=600&fit=crop"
-
-        cityName.contains("rome") || cityName.contains("roma") ->
-            "https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=800&h=600&fit=crop"
-
-        cityName.contains("rio") && countryName.contains("brazil") ->
-            "https://images.unsplash.com/photo-1483729558449-99ef09a8c325?w=800&h=600&fit=crop"
-
-        // Regionale Fallbacks nach Land
         countryName.contains("united states") || countryName.contains("usa") ->
             "https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=800&h=600&fit=crop"
-
         countryName.contains("united kingdom") || countryName.contains("england") ->
             "https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=800&h=600&fit=crop"
-
         countryName.contains("france") ->
             "https://images.unsplash.com/photo-1502602898536-47ad22581b52?w=800&h=600&fit=crop"
-
         countryName.contains("germany") ->
             "https://images.unsplash.com/photo-1587330979470-3016b6702d89?w=800&h=600&fit=crop"
-
         countryName.contains("japan") ->
             "https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=800&h=600&fit=crop"
-
         countryName.contains("australia") ->
             "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&h=600&fit=crop"
-
-        countryName.contains("brazil") ->
-            "https://images.unsplash.com/photo-1483729558449-99ef09a8c325?w=800&h=600&fit=crop"
-
-        countryName.contains("italy") ->
-            "https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=800&h=600&fit=crop"
-
-        countryName.contains("spain") ->
-            "https://images.unsplash.com/photo-1539037116277-4db20889f2d4?w=800&h=600&fit=crop"
-
-        // Standard-Fallback für unbekannte Locations
-        else ->
-            "https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=800&h=600&fit=crop"
-    }
-}
-
-// NEUE: Regionale Fallback-URL-Generation
-private fun generateRegionalFallbackUrl(location: LocationEntity): String {
-    // Intelligente regionale Fallback-Strategie
-    val cityName = location.city?.lowercase() ?: ""
-    val countryName = location.country?.lowercase() ?: ""
-
-    return when {
-        // Länder-basierte Fallbacks
-        countryName.contains("united states") || countryName.contains("usa") ->
-            "https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=800&h=600&fit=crop"
-
-        countryName.contains("united kingdom") || countryName.contains("england") || countryName.contains("scotland") || countryName.contains("wales") ->
-            "https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=800&h=600&fit=crop"
-
-        countryName.contains("france") ->
-            "https://images.unsplash.com/photo-1502602898536-47ad22581b52?w=800&h=600&fit=crop"
-
-        countryName.contains("germany") || countryName.contains("deutschland") ->
-            "https://images.unsplash.com/photo-1587330979470-3016b6702d89?w=800&h=600&fit=crop"
-
-        countryName.contains("japan") || countryName.contains("nippon") ->
-            "https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=800&h=600&fit=crop"
-
-        countryName.contains("australia") ->
-            "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&h=600&fit=crop"
-
-        countryName.contains("brazil") || countryName.contains("brasil") ->
-            "https://images.unsplash.com/photo-1483729558449-99ef09a8c325?w=800&h=600&fit=crop"
-
-        countryName.contains("italy") || countryName.contains("italia") ->
-            "https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=800&h=600&fit=crop"
-
-        countryName.contains("spain") || countryName.contains("españa") ->
-            "https://images.unsplash.com/photo-1539037116277-4db20889f2d4?w=800&h=600&fit=crop"
-
-        countryName.contains("russia") || countryName.contains("rossiya") ->
-            "https://images.unsplash.com/photo-1547036967-23d11aacaee0?w=800&h=600&fit=crop"
-
-        countryName.contains("china") || countryName.contains("中国") ->
-            "https://images.unsplash.com/photo-1508804185872-d7badad00f7d?w=800&h=600&fit=crop"
-
-        countryName.contains("india") || countryName.contains("भारत") ->
-            "https://images.unsplash.com/photo-1524492412937-b28074a5d7da?w=800&h=600&fit=crop"
-
         countryName.contains("canada") ->
-            "https://images.unsplash.com/photo-1503614472-8c93d56cd8d1?w=800&h=600&fit=crop"
-
-        countryName.contains("mexico") || countryName.contains("méxico") ->
-            "https://images.unsplash.com/photo-1518105779142-d975f22f1b0a?w=800&h=600&fit=crop"
-
-        countryName.contains("netherlands") || countryName.contains("nederland") ->
-            "https://images.unsplash.com/photo-1534351590666-13e3e96b5017?w=800&h=600&fit=crop"
-
-        countryName.contains("belgium") || countryName.contains("belgique") ->
-            "https://images.unsplash.com/photo-1558618666-fccd38c73cd5?w=800&h=600&fit=crop"
-
-        countryName.contains("switzerland") || countryName.contains("schweiz") ->
-            "https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=800&h=600&fit=crop"
-
-        countryName.contains("austria") || countryName.contains("österreich") ->
-            "https://images.unsplash.com/photo-1471919743851-c4df8b6ee133?w=800&h=600&fit=crop"
-
-        countryName.contains("sweden") || countryName.contains("sverige") ->
-            "https://images.unsplash.com/photo-1509356843151-3e7d96241e11?w=800&h=600&fit=crop"
-
-        countryName.contains("norway") || countryName.contains("norge") ->
-            "https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=800&h=600&fit=crop"
-
-        countryName.contains("denmark") || countryName.contains("danmark") ->
-            "https://images.unsplash.com/photo-1513622470522-26c3c8a854bc?w=800&h=600&fit=crop"
-
-        countryName.contains("south korea") || countryName.contains("korea") ->
-            "https://images.unsplash.com/photo-1517154421773-0529f29ea451?w=800&h=600&fit=crop"
-
-        countryName.contains("thailand") ->
-            "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&h=600&fit=crop"
-
-        countryName.contains("singapore") ->
-            "https://images.unsplash.com/photo-1525625293386-3f8f99389edd?w=800&h=600&fit=crop"
-
-        // Kontinental-basierte Fallbacks
-        isEuropeanCountry(countryName) ->
-            "https://images.unsplash.com/photo-1467269204594-9661b134dd2b?w=800&h=600&fit=crop"
-
-        isAsianCountry(countryName) ->
-            "https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=800&h=600&fit=crop"
-
-        isAfricanCountry(countryName) ->
-            "https://images.unsplash.com/photo-1516026672322-bc52d61a55d5?w=800&h=600&fit=crop"
-
-        isSouthAmericanCountry(countryName) ->
-            "https://images.unsplash.com/photo-1483729558449-99ef09a8c325?w=800&h=600&fit=crop"
-
-        isNorthAmericanCountry(countryName) ->
-            "https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=800&h=600&fit=crop"
-
-        isOceaniaCountry(countryName) ->
-            "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&h=600&fit=crop"
-
-        // Standard-Fallback für unbekannte Regionen
+            "https://images.unsplash.com/photo-1517935706615-2717063c2225?w=800&h=600&fit=crop"
+        countryName.contains("morocco") ->
+            "https://images.unsplash.com/photo-1539650116574-75c0c6d73f6e?w=800&h=600&fit=crop"
         else ->
             "https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=800&h=600&fit=crop"
     }
-}
-
-// Hilfsfunktionen für kontinentale Erkennung
-private fun isEuropeanCountry(country: String): Boolean {
-    val europeanCountries = listOf(
-        "albania", "andorra", "armenia", "austria", "azerbaijan", "belarus", "belgium",
-        "bosnia", "bulgaria", "croatia", "cyprus", "czech", "denmark", "estonia",
-        "finland", "france", "georgia", "germany", "greece", "hungary", "iceland",
-        "ireland", "italy", "kosovo", "latvia", "liechtenstein", "lithuania",
-        "luxembourg", "malta", "moldova", "monaco", "montenegro", "netherlands",
-        "north macedonia", "norway", "poland", "portugal", "romania", "san marino",
-        "serbia", "slovakia", "slovenia", "spain", "sweden", "switzerland",
-        "ukraine", "united kingdom", "vatican"
-    )
-    return europeanCountries.any { country.contains(it) }
-}
-
-private fun isAsianCountry(country: String): Boolean {
-    val asianCountries = listOf(
-        "afghanistan", "armenia", "azerbaijan", "bahrain", "bangladesh", "bhutan",
-        "brunei", "cambodia", "china", "cyprus", "georgia", "india", "indonesia",
-        "iran", "iraq", "israel", "japan", "jordan", "kazakhstan", "kuwait",
-        "kyrgyzstan", "laos", "lebanon", "malaysia", "maldives", "mongolia",
-        "myanmar", "nepal", "north korea", "oman", "pakistan", "palestine",
-        "philippines", "qatar", "saudi arabia", "singapore", "south korea",
-        "sri lanka", "syria", "tajikistan", "thailand", "timor", "turkey",
-        "turkmenistan", "united arab emirates", "uzbekistan", "vietnam", "yemen"
-    )
-    return asianCountries.any { country.contains(it) }
-}
-
-private fun isAfricanCountry(country: String): Boolean {
-    val africanCountries = listOf(
-        "algeria", "angola", "benin", "botswana", "burkina", "burundi", "cameroon",
-        "cape verde", "central african", "chad", "comoros", "congo", "djibouti",
-        "egypt", "equatorial guinea", "eritrea", "eswatini", "ethiopia", "gabon",
-        "gambia", "ghana", "guinea", "ivory coast", "kenya", "lesotho", "liberia",
-        "libya", "madagascar", "malawi", "mali", "mauritania", "mauritius",
-        "morocco", "mozambique", "namibia", "niger", "nigeria", "rwanda",
-        "sao tome", "senegal", "seychelles", "sierra leone", "somalia",
-        "south africa", "south sudan", "sudan", "tanzania", "togo", "tunisia",
-        "uganda", "zambia", "zimbabwe"
-    )
-    return africanCountries.any { country.contains(it) }
-}
-
-private fun isSouthAmericanCountry(country: String): Boolean {
-    val southAmericanCountries = listOf(
-        "argentina", "bolivia", "brazil", "chile", "colombia", "ecuador",
-        "french guiana", "guyana", "paraguay", "peru", "suriname", "uruguay", "venezuela"
-    )
-    return southAmericanCountries.any { country.contains(it) }
-}
-
-private fun isNorthAmericanCountry(country: String): Boolean {
-    val northAmericanCountries = listOf(
-        "antigua", "bahamas", "barbados", "belize", "canada", "costa rica",
-        "cuba", "dominica", "dominican republic", "el salvador", "grenada",
-        "guatemala", "haiti", "honduras", "jamaica", "mexico", "nicaragua",
-        "panama", "saint kitts", "saint lucia", "saint vincent", "trinidad",
-        "united states", "usa"
-    )
-    return northAmericanCountries.any { country.contains(it) }
-}
-
-private fun isOceaniaCountry(country: String): Boolean {
-    val oceaniaCountries = listOf(
-        "australia", "fiji", "kiribati", "marshall islands", "micronesia",
-        "nauru", "new zealand", "palau", "papua new guinea", "samoa",
-        "solomon islands", "tonga", "tuvalu", "vanuatu"
-    )
-    return oceaniaCountries.any { country.contains(it) }
 }
