@@ -9,6 +9,7 @@ import com.example.geogeusserclone.data.network.InteractiveStreetViewResponse
 import com.example.geogeusserclone.data.network.StreetViewNavigationResponse
 import com.example.geogeusserclone.data.network.StreetViewNavigationRequest
 import com.example.geogeusserclone.data.network.InteractiveStreetView
+import com.example.geogeusserclone.data.network.StreetViewConfig
 import com.example.geogeusserclone.utils.Constants
 import com.example.geogeusserclone.utils.DistanceCalculator
 import kotlinx.coroutines.*
@@ -814,6 +815,10 @@ class LocationRepository @Inject constructor(
             cityName.contains("berlin") -> "https://images.unsplash.com/photo-1587330979470-3016b6702d89?w=800&h=600&fit=crop"
             cityName.contains("sydney") -> "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&h=600&fit=crop"
             cityName.contains("rome") -> "https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=800&h=600&fit=crop"
+            cityName.contains("barcelona") -> "https://images.unsplash.com/photo-1539037116277-4db20889f2d4?w=800&h=600&fit=crop"
+            cityName.contains("providence") || cityName.contains("provence") -> "https://images.unsplash.com/photo-1502602898536-47ad22581b52?w=800&h=600&fit=crop"
+            cityName.contains("aqaba") -> "https://images.unsplash.com/photo-1539650116574-75c0c6d73f6e?w=800&h=600&fit=crop"
+            cityName.contains("cork") -> "https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=800&h=600&fit=crop"
             else -> null
         }
     }
@@ -831,6 +836,211 @@ class LocationRepository @Inject constructor(
             countryName.contains("australia") -> "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&h=600&fit=crop"
             countryName.contains("italy") -> "https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=800&h=600&fit=crop"
             countryName.contains("spain") -> "https://images.unsplash.com/photo-1539037116277-4db20889f2d4?w=800&h=600&fit=crop"
+            else -> "https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=800&h=600&fit=crop"
+        }
+    }
+
+    // NEUE: Street View Diagnostic API Integration
+    suspend fun getStreetViewWithDiagnostic(
+        lat: Double,
+        lng: Double,
+        city: String? = null,
+        country: String? = null
+    ): Result<StreetViewConfig> {
+        return try {
+            println("LocationRepository: 🔍 Verwende Diagnostic API für optimale Street View-Auswahl")
+
+            // 1. Versuche zuerst das neue Diagnostic API
+            val diagnosticRequest = com.example.geogeusserclone.data.network.StreetViewDiagnosticRequest(
+                latitude = lat,
+                longitude = lng,
+                heading = (0..359).random(),
+                pitch = 0,
+                fov = 90,
+                responsive = true
+            )
+
+            val diagnosticResponse = withTimeout(3000L) {
+                apiService.getStreetViewDiagnostic(diagnosticRequest)
+            }
+
+            if (diagnosticResponse.isSuccessful && diagnosticResponse.body()?.success == true) {
+                val data = diagnosticResponse.body()!!.data
+                println("LocationRepository: ✅ Diagnostic API erfolgreich - Empfehlung: ${data.recommended}")
+
+                // Verwende Backend-Empfehlung
+                val config = when (data.recommended) {
+                    "interactive" -> {
+                        if (isUrlSafeAndValid(data.embedUrl)) {
+                            com.example.geogeusserclone.data.network.StreetViewConfig(
+                                mode = "interactive",
+                                url = data.embedUrl,
+                                isReliable = true,
+                                quality = "high",
+                                hasNavigation = true
+                            )
+                        } else {
+                            // Fallback zu static
+                            com.example.geogeusserclone.data.network.StreetViewConfig(
+                                mode = "static",
+                                url = data.alternatives.static,
+                                isReliable = true,
+                                quality = "medium",
+                                hasNavigation = false
+                            )
+                        }
+                    }
+                    "static" -> {
+                        com.example.geogeusserclone.data.network.StreetViewConfig(
+                            mode = "static",
+                            url = data.fallback,
+                            isReliable = true,
+                            quality = "medium",
+                            hasNavigation = false
+                        )
+                    }
+                    else -> {
+                        // Fallback zu bekannten Locations
+                        val fallbackUrl = getKnownLocationFallback(lat, lng, city, country)
+                            ?: getRegionalFallbackByCoords(lat, lng)
+
+                        com.example.geogeusserclone.data.network.StreetViewConfig(
+                            mode = "fallback_image",
+                            url = fallbackUrl,
+                            isReliable = false,
+                            quality = "low",
+                            hasNavigation = false,
+                            errorMessage = "Street View nicht verfügbar"
+                        )
+                    }
+                }
+
+                println("LocationRepository: 🎯 Gewählte Konfiguration: ${config.mode} - URL: ${config.url.take(60)}...")
+                Result.success(config)
+            } else {
+                println("LocationRepository: ❌ Diagnostic API fehlgeschlagen, verwende Fallback-Strategie")
+                // Fallback zu bestehender Methode
+                createFallbackConfig(lat, lng, city, country)
+            }
+
+        } catch (e: Exception) {
+            println("LocationRepository: ❌ Diagnostic API Exception: ${e.message}")
+            createFallbackConfig(lat, lng, city, country)
+        }
+    }
+
+    private fun createFallbackConfig(
+        lat: Double,
+        lng: Double,
+        city: String?,
+        country: String?
+    ): Result<com.example.geogeusserclone.data.network.StreetViewConfig> {
+        return try {
+            // 1. Versuche bekannte Location
+            val knownUrl = getKnownLocationFallback(lat, lng, city, country)
+            if (knownUrl != null) {
+                val config = com.example.geogeusserclone.data.network.StreetViewConfig(
+                    mode = "fallback_image",
+                    url = knownUrl,
+                    isReliable = false,
+                    quality = "medium",
+                    hasNavigation = false,
+                    errorMessage = "Bekannte Location - Street View nicht verfügbar"
+                )
+                return Result.success(config)
+            }
+
+            // 2. Versuche statische Google Street View URL
+            val staticUrl = generateStaticStreetViewUrl(lat, lng)
+            if (staticUrl != null) {
+                val config = com.example.geogeusserclone.data.network.StreetViewConfig(
+                    mode = "static",
+                    url = staticUrl,
+                    isReliable = false,
+                    quality = "medium",
+                    hasNavigation = false,
+                    errorMessage = "Fallback zu statischer Street View"
+                )
+                return Result.success(config)
+            }
+
+            // 3. Regionaler Fallback
+            val regionalUrl = getRegionalFallbackByCoords(lat, lng)
+            val config = com.example.geogeusserclone.data.network.StreetViewConfig(
+                mode = "fallback_image",
+                url = regionalUrl,
+                isReliable = false,
+                quality = "low",
+                hasNavigation = false,
+                errorMessage = "Regionaler Fallback - Street View nicht verfügbar"
+            )
+
+            Result.success(config)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    // Hilfsmethoden für Fallback-URLs
+    private fun getKnownLocationFallback(
+        lat: Double,
+        lng: Double,
+        city: String?,
+        country: String?
+    ): String? {
+        val cityLower = city?.lowercase() ?: ""
+        val countryLower = country?.lowercase() ?: ""
+
+        return when {
+            cityLower.contains("death valley") -> "https://images.unsplash.com/photo-1559827260-dc66d52bef19?w=800&h=600&fit=crop"
+            cityLower.contains("paris") -> "https://images.unsplash.com/photo-1502602898536-47ad22581b52?w=800&h=600&fit=crop"
+            cityLower.contains("london") -> "https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=800&h=600&fit=crop"
+            cityLower.contains("new york") -> "https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=800&h=600&fit=crop"
+            cityLower.contains("tokyo") -> "https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=800&h=600&fit=crop"
+            cityLower.contains("sydney") -> "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&h=600&fit=crop"
+            cityLower.contains("berlin") -> "https://images.unsplash.com/photo-1587330979470-3016b6702d89?w=800&h=600&fit=crop"
+            cityLower.contains("rome") -> "https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=800&h=600&fit=crop"
+            cityLower.contains("barcelona") -> "https://images.unsplash.com/photo-1539037116277-4db20889f2d4?w=800&h=600&fit=crop"
+            cityLower.contains("providence") || cityLower.contains("provence") -> "https://images.unsplash.com/photo-1502602898536-47ad22581b52?w=800&h=600&fit=crop"
+            cityLower.contains("aqaba") -> "https://images.unsplash.com/photo-1539650116574-75c0c6d73f6e?w=800&h=600&fit=crop"
+            cityLower.contains("cork") -> "https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=800&h=600&fit=crop"
+            else -> null
+        }
+    }
+
+    private fun generateStaticStreetViewUrl(lat: Double, lng: Double): String? {
+        return try {
+            if (lat < -90.0 || lat > 90.0 || lng < -180.0 || lng > 180.0) {
+                return null
+            }
+
+            val heading = (0..359).random()
+            "https://maps.googleapis.com/maps/api/streetview?" +
+                    "size=640x640" +
+                    "&location=$lat,$lng" +
+                    "&heading=$heading" +
+                    "&pitch=0" +
+                    "&fov=90" +
+                    "&key=AIzaSyD4C5oyZ4ya-sYGKIDqoRa1C3Mqjl22eUc"
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun getRegionalFallbackByCoords(lat: Double, lng: Double): String {
+        return when {
+            // USA
+            (lat in 25.0..49.0 && lng in -125.0..-66.0) -> "https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=800&h=600&fit=crop"
+            // Europa
+            (lat in 35.0..70.0 && lng in -10.0..30.0) -> "https://images.unsplash.com/photo-1502602898536-47ad22581b52?w=800&h=600&fit=crop"
+            // Asien
+            (lat in 10.0..50.0 && lng in 100.0..150.0) -> "https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=800&h=600&fit=crop"
+            // Australien
+            (lat in -45.0..-10.0 && lng in 110.0..155.0) -> "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&h=600&fit=crop"
+            // Afrika
+            (lat in -35.0..35.0 && lng in -20.0..50.0) -> "https://images.unsplash.com/photo-1516026672322-bc52d61a55d5?w=800&h=600&fit=crop"
+            // Südamerika
+            (lat in -55.0..15.0 && lng in -80.0..-35.0) -> "https://images.unsplash.com/photo-1483729558449-99ef09a8c325?w=800&h=600&fit=crop"
             else -> "https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=800&h=600&fit=crop"
         }
     }

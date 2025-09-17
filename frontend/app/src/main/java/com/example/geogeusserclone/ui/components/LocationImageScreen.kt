@@ -51,7 +51,7 @@ fun LocationImageScreen(
         when {
             // Interactive Street View (Google Maps Embed)
             location.imageUrl.contains("google.com/maps/embed/v1/streetview") &&
-            !location.imageUrl.contains("[object Object]") -> {
+                    !location.imageUrl.contains("[object Object]") -> {
                 // KORRIGIERT: Optimierte WebView mit robuster Fehlerbehandlung
                 AndroidView(
                     factory = { context ->
@@ -188,8 +188,8 @@ fun LocationImageScreen(
 
             // Static Street View (Google API)
             location.imageUrl.startsWith("https://maps.googleapis.com/maps/api/streetview") &&
-            !location.imageUrl.contains("[object Object]") &&
-            !location.imageUrl.contains("PLACEHOLDER_API_KEY") -> {
+                    !location.imageUrl.contains("[object Object]") &&
+                    !location.imageUrl.contains("PLACEHOLDER_API_KEY") -> {
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
                         .data(location.imageUrl)
@@ -207,7 +207,7 @@ fun LocationImageScreen(
 
             // Fallback Images (Unsplash etc.)
             location.imageUrl.contains("unsplash.com") ||
-            location.imageUrl.contains("images.") -> {
+                    location.imageUrl.contains("images.") -> {
                 FallbackImageView(
                     imageUrl = location.imageUrl,
                     locationName = location.city ?: "Unbekannt",
@@ -226,7 +226,7 @@ fun LocationImageScreen(
 
             // Corrupted URLs with [object Object]
             location.imageUrl.contains("[object Object]") ||
-            location.imageUrl.contains("PLACEHOLDER_API_KEY") -> {
+                    location.imageUrl.contains("PLACEHOLDER_API_KEY") -> {
                 val fallbackUrl = generateRegionalFallbackUrl(location)
                 FallbackImageView(
                     imageUrl = fallbackUrl,
@@ -333,24 +333,24 @@ private fun LocationInfoCard(
                 val (emoji, text, color) = when {
                     // Google Maps Embed URL (Interaktiv) - KORRIGIERT: Bessere Erkennung
                     location.imageUrl.contains("google.com/maps/embed/v1/streetview") &&
-                    !location.imageUrl.contains("[object Object]") -> Triple("🎮", "Interactive", primaryColor)
+                            !location.imageUrl.contains("[object Object]") -> Triple("🎮", "Interactive", primaryColor)
 
                     // Statische Google Street View API - KORRIGIERT: Prüfe auf gültige URLs
                     location.imageUrl.startsWith("https://maps.googleapis.com/maps/api/streetview") &&
-                    !location.imageUrl.contains("[object Object]") &&
-                    !location.imageUrl.contains("PLACEHOLDER_API_KEY") &&
-                    Regex("key=AIza[\\w-]+", RegexOption.IGNORE_CASE).containsMatchIn(location.imageUrl) -> Triple("📸", "Street View", secondaryColor)
+                            !location.imageUrl.contains("[object Object]") &&
+                            !location.imageUrl.contains("PLACEHOLDER_API_KEY") &&
+                            Regex("key=AIza[\\w-]+", RegexOption.IGNORE_CASE).containsMatchIn(location.imageUrl) -> Triple("📸", "Street View", secondaryColor)
 
                     // Fallback Bilder
                     (location.imageUrl.contains("unsplash.com") ||
-                    location.imageUrl.contains("images.")) -> Triple("🖼️", "Beispielbild", outlineColor)
+                            location.imageUrl.contains("images.")) -> Triple("🖼️", "Beispielbild", outlineColor)
 
                     // Kein Bild verfügbar
                     location.imageUrl.isBlank() -> Triple("❌", "Kein Bild", errorColor)
 
                     // Korrupte Street View URLs
                     (location.imageUrl.contains("[object Object]") ||
-                    location.imageUrl.contains("PLACEHOLDER_API_KEY")) -> Triple("🛑", "Fehlerhaft", errorColor)
+                            location.imageUrl.contains("PLACEHOLDER_API_KEY")) -> Triple("🛑", "Fehlerhaft", errorColor)
 
                     else -> Triple("❓", "Unbekannt", outlineColor)
                 }

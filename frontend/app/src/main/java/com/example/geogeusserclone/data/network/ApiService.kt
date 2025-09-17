@@ -142,4 +142,19 @@ interface ApiService {
         @Query("quality") quality: String = "medium",
         @Query("interactive") interactive: Boolean = true
     ): Response<Map<String, InteractiveStreetView>>
+
+    // NEUE: Street View Diagnostic API
+    @POST("locations/streetview/diagnostic")
+    suspend fun getStreetViewDiagnostic(
+        @Body request: StreetViewDiagnosticRequest
+    ): Response<StreetViewDiagnosticResponse>
+
+    // NEUE: Street View Fallback-Generierung
+    @GET("locations/streetview/fallback")
+    suspend fun generateStreetViewFallback(
+        @Query("lat") lat: Double,
+        @Query("lng") lng: Double,
+        @Query("city") city: String? = null,
+        @Query("country") country: String? = null
+    ): Response<StreetViewDiagnosticResponse>
 }

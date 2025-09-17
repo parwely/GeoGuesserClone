@@ -45,7 +45,6 @@ class GameActivity : ComponentActivity() {
                     onNextRound = { gameViewModel.proceedToNextRound() },
                     onShowMap = { gameViewModel.showMap() },
                     onHideMap = { gameViewModel.hideMap() },
-                    onPan = { /* Pan-Event wird bereits in LocationImageScreen behandelt */ },
                     onBack = { finish() },
                     getGuesses = { gameViewModel.getGameGuesses() }
                 )
@@ -61,7 +60,6 @@ fun GameScreen(
     onNextRound: () -> Unit,
     onShowMap: () -> Unit,
     onHideMap: () -> Unit,
-    onPan: (Float) -> Unit,
     onBack: () -> Unit,
     getGuesses: () -> Flow<List<GuessEntity>>
 ) {
@@ -96,9 +94,7 @@ fun GameScreen(
                 LocationImageScreen(
                     location = gameState.currentLocation,
                     timeRemaining = gameState.timeRemaining,
-                    onShowMap = onShowMap,
-                    onPan = onPan,
-                    streetViewAvailable = gameState.streetViewAvailable // Pass flag from UI state
+                    onShowMap = onShowMap
                 )
             }
 
