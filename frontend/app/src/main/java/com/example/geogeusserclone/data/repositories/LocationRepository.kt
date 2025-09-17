@@ -932,9 +932,10 @@ class LocationRepository @Inject constructor(
         }
     }
 
-    // NEUE: Backend URL-Bereinigung für unsupported Parameter
+    // NEUE: Backend URL-Bereinigung für unsupported Parameter - KORRIGIERT mit URL-Dekodierung
     private fun removeUnsupportedEmbedParametersFromBackend(url: String): String {
-        var cleanedUrl = url
+        // KRITISCH: Dekodiere URL zuerst, bevor Parameter entfernt werden
+        var cleanedUrl = decodeUrlParametersInRepository(url)
 
         // KRITISCH: Google Maps Embed API unterstützt diese Parameter NICHT
         val unsupportedParams = listOf(
@@ -968,5 +969,23 @@ class LocationRepository @Inject constructor(
         println("LocationRepository: 🔧 Backend URL bereinigt zu: ${cleanedUrl.take(120)}...")
 
         return cleanedUrl
+    }
+
+    // NEUE: URL-Parameter Dekodierung für Repository
+    private fun decodeUrlParametersInRepository(url: String): String {
+        return try {
+            // Dekodiere nur die wichtigsten URL-kodierten Zeichen für Google Maps
+            url.replace("%2C", ",")  // Komma - KRITISCH für location Parameter
+               .replace("%20", " ")  // Leerzeichen
+               .replace("%3D", "=")  // Gleichheitszeichen
+               .replace("%26", "&")  // Ampersand
+               .also { decodedUrl ->
+                   println("LocationRepository: 🔄 URL dekodiert von: ${url.take(80)}...")
+                   println("LocationRepository: 🔄 URL dekodiert zu: ${decodedUrl.take(80)}...")
+               }
+        } catch (e: Exception) {
+            println("LocationRepository: ⚠️ URL-Dekodierung fehlgeschlagen: ${e.message}")
+            url // Returniere Original bei Fehlern
+        }
     }
 }

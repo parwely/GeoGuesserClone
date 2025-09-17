@@ -780,23 +780,32 @@ private fun hasValidLocationParameter(url: String): Boolean {
 }
 
 // NEUE: Performance-optimierte WebView-Komponente
-@Composable
+// NEUE: Prüfe ob URL gültigen location Parameter hat - KORRIGIERT für dekodierte URLs
 private fun OptimizedWebView(
     url: String,
-    locationName: String,
+        // KRITISCH: Dekodiere URL zuerst, dann validiere
+        val decodedUrl = decodeUrlParameters(url)
+        val locationMatch = Regex("location=([^&]+)").find(decodedUrl) ?: return false
     onError: (String) -> Unit,
-    modifier: Modifier = Modifier
-) {
+
+        // Nach Dekodierung sollten wir normale Kommas haben, nicht %2C
+        val coords = locationParam.split(",")
     var isWebViewReady by remember { mutableStateOf(false) }
     var loadingProgress by remember { mutableIntStateOf(0) }
     var hasPerformedValidation by remember { mutableStateOf(false) }
     var validationAttempts by remember { mutableIntStateOf(0) }
-
+            val isValid = lat != null && lng != null &&
     AndroidView(
         factory = { context ->
+
+            println("LocationImageScreen: 🔍 Location validation: lat=$lat, lng=$lng, valid=$isValid")
+            return isValid
             WebView(context).apply {
+
+        println("LocationImageScreen: ❌ Location Parameter hat nicht genau 2 Koordinaten: ${coords.size}")
                 // KRITISCH: Performance-optimierte Einstellungen mit API-Call-Prevention
                 settings.apply {
+        println("LocationImageScreen: ❌ Fehler bei Location Parameter Validierung: ${e.message}")
                     // JavaScript und DOM
                     javaScriptEnabled = true
                     javaScriptCanOpenWindowsAutomatically = false
