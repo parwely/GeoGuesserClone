@@ -2,130 +2,140 @@ package com.example.geogeusserclone.data.network
 
 import kotlinx.coroutines.delay
 import retrofit2.Response
-import java.io.IOException
-import java.net.SocketTimeoutException
-import java.net.UnknownHostException
 
 /**
- * Retry-Mechanismus für robuste Backend-Integration
- * Behebt die "Retrieved locations: 0" und "401 Unauthorized" Probleme
+ * Intelligent API Retry Handler für robuste Backend-Kommunikation
+ * Versucht verschiedene Parameter-Kombinationen für optimale Location-Beschaffung
  */
 object ApiRetryHandler {
 
     /**
-     * Führt API-Calls mit intelligenter Retry-Logik aus
-     */
-    suspend fun <T> executeWithRetry(
-        maxRetries: Int = 3,
-        delayMs: Long = 1000L,
-        backoffMultiplier: Float = 2f,
-        apiCall: suspend () -> Response<T>
-    ): Response<T> {
-        var lastException: Exception? = null
-        var delay = delayMs
-
-        repeat(maxRetries) { attempt ->
-            try {
-                val response = apiCall()
-
-                // Erfolgreiche Response oder nicht-retryable Fehler
-                if (response.isSuccessful || !isRetryableError(response.code())) {
-                    return response
-                }
-
-                // Bei retryable Fehlern: warte und versuche erneut
-                if (attempt < maxRetries - 1) {
-                    println("ApiRetryHandler: Attempt ${attempt + 1} failed with ${response.code()}, retrying in ${delay}ms")
-                    delay(delay)
-                    delay = (delay * backoffMultiplier).toLong()
-                }
-
-            } catch (e: Exception) {
-                lastException = e
-
-                if (!isRetryableException(e) || attempt == maxRetries - 1) {
-                    throw e
-                }
-
-                println("ApiRetryHandler: Attempt ${attempt + 1} failed with ${e.javaClass.simpleName}, retrying in ${delay}ms")
-                delay(delay)
-                delay = (delay * backoffMultiplier).toLong()
-            }
-        }
-
-        // Alle Versuche fehlgeschlagen
-        throw lastException ?: Exception("All retry attempts failed")
-    }
-
-    /**
-     * Prüft ob HTTP-Statuscode retry-fähig ist
-     */
-    private fun isRetryableError(httpCode: Int): Boolean {
-        return when (httpCode) {
-            429, // Too Many Requests
-            500, // Internal Server Error
-            502, // Bad Gateway
-            503, // Service Unavailable
-            504, // Gateway Timeout
-            408  // Request Timeout
-            -> true
-            else -> false
-        }
-    }
-
-    /**
-     * Prüft ob Exception retry-fähig ist
-     */
-    private fun isRetryableException(exception: Exception): Boolean {
-        return when (exception) {
-            is SocketTimeoutException,
-            is UnknownHostException,
-            is IOException -> true
-            else -> false
-        }
-    }
-
-    /**
-     * Spezieller Retry für Location-Endpoints mit verschiedenen Parametern
-     * KORRIGIERT: Sequenziell statt parallel um Backend nicht zu überlasten
+     * Führt intelligente Retry-Versuche für Location-APIs durch
+     * Versucht verschiedene Kombinationen von Kategorie und Schwierigkeit
      */
     suspend fun <T> executeLocationRetry(
-        categories: List<String> = listOf("urban", "landmark", "rural"),
-        difficulties: List<Int> = listOf(1, 2, 3),
+        categories: List<String>,
+        difficulties: List<Int>,
+        maxRetries: Int = 6,
+        delayMs: Long = 500,
         apiCall: suspend (category: String, difficulty: Int) -> Response<T>
     ): Response<T>? {
 
-        // KORREKTUR: Mische Parameter für bessere Randomisierung
-        val shuffledCategories = categories.shuffled()
-        val shuffledDifficulties = difficulties.shuffled()
+        val attempts = mutableListOf<Pair<String, Int>>()
 
-        // Versuche verschiedene Kombinationen SEQUENZIELL (nicht parallel)
-        for (category in shuffledCategories) {
-            for (difficulty in shuffledDifficulties) {
-                try {
-                    println("ApiRetryHandler: Versuche category=$category, difficulty=$difficulty")
-
-                    val response = executeWithRetry(maxRetries = 1) { // Nur 1 Retry pro Kombination
-                        apiCall(category, difficulty)
-                    }
-
-                    if (response.isSuccessful) {
-                        println("ApiRetryHandler: ✅ Erfolgreich mit category=$category, difficulty=$difficulty")
-                        return response
-                    } else {
-                        println("ApiRetryHandler: ❌ HTTP ${response.code()} für category=$category, difficulty=$difficulty")
-                    }
-
-                } catch (e: Exception) {
-                    println("ApiRetryHandler: ❌ Exception für category=$category, difficulty=$difficulty: ${e.message}")
-                    continue
-                }
-
-                // Kleine Pause zwischen Requests um Backend zu entlasten
-                delay(100)
+        // Erstelle alle Kombinationen
+        for (category in categories) {
+            for (difficulty in difficulties) {
+                attempts.add(category to difficulty)
             }
         }
 
-        return null // Alle Parameter-Kombinationen fehlgeschlagen
+        // Shuffel für bessere Verteilung
+        attempts.shuffle()
+
+        // Begrenze auf maxRetries
+        val limitedAttempts = attempts.take(maxRetries)
+
+        for ((index, categoryDifficulty) in limitedAttempts.withIndex()) {
+            val (category, difficulty) = categoryDifficulty
+
+            try {
+                println("ApiRetryHandler: Versuche category=$category, difficulty=$difficulty")
+
+                val response = apiCall(category, difficulty)
+
+                if (response.isSuccessful) {
+                    println("ApiRetryHandler: ✅ Erfolgreich mit category=$category, difficulty=$difficulty")
+                    return response
+                } else {
+                    println("ApiRetryHandler: ❌ Fehlgeschlagen ($response.code()) mit category=$category, difficulty=$difficulty")
+                }
+
+            } catch (e: Exception) {
+                println("ApiRetryHandler: ❌ Exception bei category=$category, difficulty=$difficulty: ${e.message}")
+            }
+
+            // Delay zwischen Versuchen (aber nicht nach dem letzten)
+            if (index < limitedAttempts.size - 1) {
+                delay(delayMs)
+            }
+        }
+
+        println("ApiRetryHandler: ❌ Alle Retry-Versuche fehlgeschlagen")
+        return null
+    }
+
+    /**
+     * Einfacher Retry für einzelne API-Calls
+     */
+    suspend fun <T> executeSimpleRetry(
+        maxRetries: Int = 3,
+        delayMs: Long = 1000,
+        apiCall: suspend () -> Response<T>
+    ): Response<T>? {
+
+        repeat(maxRetries) { attempt ->
+            try {
+                println("ApiRetryHandler: Einfacher Retry-Versuch ${attempt + 1}/$maxRetries")
+
+                val response = apiCall()
+
+                if (response.isSuccessful) {
+                    println("ApiRetryHandler: ✅ Einfacher Retry erfolgreich nach ${attempt + 1} Versuchen")
+                    return response
+                } else {
+                    println("ApiRetryHandler: ❌ Einfacher Retry fehlgeschlagen (${response.code()})")
+                }
+
+            } catch (e: Exception) {
+                println("ApiRetryHandler: ❌ Exception bei einfachem Retry: ${e.message}")
+            }
+
+            // Delay zwischen Versuchen (aber nicht nach dem letzten)
+            if (attempt < maxRetries - 1) {
+                delay(delayMs)
+            }
+        }
+
+        println("ApiRetryHandler: ❌ Alle einfachen Retry-Versuche fehlgeschlagen")
+        return null
+    }
+
+    /**
+     * Exponential Backoff Retry für kritische APIs
+     */
+    suspend fun <T> executeExponentialRetry(
+        maxRetries: Int = 3,
+        baseDelayMs: Long = 1000,
+        apiCall: suspend () -> Response<T>
+    ): Response<T>? {
+
+        repeat(maxRetries) { attempt ->
+            try {
+                println("ApiRetryHandler: Exponential Retry-Versuch ${attempt + 1}/$maxRetries")
+
+                val response = apiCall()
+
+                if (response.isSuccessful) {
+                    println("ApiRetryHandler: ✅ Exponential Retry erfolgreich nach ${attempt + 1} Versuchen")
+                    return response
+                } else {
+                    println("ApiRetryHandler: ❌ Exponential Retry fehlgeschlagen (${response.code()})")
+                }
+
+            } catch (e: Exception) {
+                println("ApiRetryHandler: ❌ Exception bei Exponential Retry: ${e.message}")
+            }
+
+            // Exponential Backoff: 1s, 2s, 4s, etc.
+            if (attempt < maxRetries - 1) {
+                val delayTime = baseDelayMs * (1L shl attempt) // 2^attempt
+                println("ApiRetryHandler: Warte ${delayTime}ms vor nächstem Versuch...")
+                delay(delayTime)
+            }
+        }
+
+        println("ApiRetryHandler: ❌ Alle Exponential Retry-Versuche fehlgeschlagen")
+        return null
     }
 }

@@ -12,14 +12,6 @@
             </PendingDiffInfo>
           </value>
         </entry>
-        <entry key="$PROJECT_DIR$/app/src/main/java/com/example/geogeusserclone/data/database/dao/GuessDao.kt">
-          <value>
-            <PendingDiffInfo>
-              <option name="filePath" value="$PROJECT_DIR$/app/src/main/java/com/example/geogeusserclone/data/database/dao/GuessDao.kt" />
-              <option name="updatedContent" value="package com.example.geogeusserclone.data.database.dao&#10;&#10;import androidx.room.*&#10;import com.example.geogeusserclone.data.database.entities.GuessEntity&#10;import kotlinx.coroutines.flow.Flow&#10;&#10;@Dao&#10;interface GuessDao {&#10;&#10;    @Query(&quot;SELECT * FROM guesses WHERE id = :guessId&quot;)&#10;    suspend fun getGuessById(guessId: String): GuessEntity?&#10;&#10;    @Query(&quot;SELECT * FROM guesses WHERE gameId = :gameId ORDER BY submittedAt ASC&quot;)&#10;    fun getGuessesByGame(gameId: String): Flow&lt;List&lt;GuessEntity&gt;&gt;&#10;&#10;    @Query(&quot;SELECT * FROM guesses WHERE gameId = :gameId ORDER BY submittedAt ASC&quot;)&#10;    suspend fun getGuessesByGameSync(gameId: String): List&lt;GuessEntity&gt;&#10;&#10;    @Query(&quot;SELECT * FROM guesses WHERE locationId = :locationId&quot;)&#10;    suspend fun getGuessesByLocation(locationId: String): List&lt;GuessEntity&gt;&#10;&#10;    @Query(&quot;SELECT AVG(score) FROM guesses WHERE gameId IN (SELECT id FROM games WHERE userId = :userId)&quot;)&#10;    suspend fun getAverageScoreByUser(userId: String): Double?&#10;&#10;    @Query(&quot;SELECT MAX(score) FROM guesses WHERE gameId IN (SELECT id FROM games WHERE userId = :userId)&quot;)&#10;    suspend fun getBestScoreByUser(userId: String): Int?&#10;&#10;    @Insert(onConflict = OnConflictStrategy.REPLACE)&#10;    suspend fun insertGuess(guess: GuessEntity)&#10;&#10;    @Insert(onConflict = OnConflictStrategy.REPLACE)&#10;    suspend fun insertGuesses(guesses: List&lt;GuessEntity&gt;)&#10;&#10;    @Update&#10;    suspend fun updateGuess(guess: GuessEntity)&#10;&#10;    @Delete&#10;    suspend fun deleteGuess(guess: GuessEntity)&#10;&#10;    @Query(&quot;DELETE FROM guesses WHERE gameId = :gameId&quot;)&#10;    suspend fun deleteGuessesByGame(gameId: String)&#10;&#10;    @Query(&quot;SELECT COUNT(*) FROM guesses WHERE gameId = :gameId&quot;)&#10;    suspend fun getGuessCountByGame(gameId: String): Int&#10;}" />
-            </PendingDiffInfo>
-          </value>
-        </entry>
         <entry key="$PROJECT_DIR$/app/src/main/java/com/example/geogeusserclone/data/database/entities/GuessEntity.kt">
           <value>
             <PendingDiffInfo>

@@ -1,6 +1,7 @@
 package com.example.geogeusserclone.data.network
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Contextual
 
 // Authentication Request Classes
 @Serializable
@@ -62,24 +63,15 @@ data class MessageResponse(
 @Serializable
 data class LocationsResponse(
     val success: Boolean,
-    val data: LocationsData
-)
-
-@Serializable
-data class LocationsData(
+    val data: List<BackendLocation>, // ❌ KORRIGIERT: Backend liefert direktes Array
     val count: Int,
-    val locations: List<BackendLocation>
+    val cached: Boolean
 )
 
 @Serializable
 data class LocationResponse(
     val success: Boolean,
-    val data: LocationDetailData
-)
-
-@Serializable
-data class LocationDetailData(
-    val location: BackendLocation
+    val data: BackendLocation // ❌ KORRIGIERT: Backend liefert direktes Objekt
 )
 
 @Serializable
@@ -112,20 +104,24 @@ data class StreetViewResponse(
 @Serializable
 data class StreetViewData(
     val location: StreetViewLocation,
-    // Neue Backend-Felder (primär)
-    val streetView: BackendStreetViewData? = null,
-    // Legacy-Felder (fallback) - KORRIGIERT: Verwende nur Gson-kompatible Typen
+    // KORRIGIERT: Backend liefert verschachtelte JSON-Struktur wie in den Logs
+    // {"streetView":{"interactive":"...","static":"..."}}
+    @Contextual val streetView: Any? = null, // KORRIGIERT: @Contextual für Any? Serialization
+    // Legacy-Felder (fallback)
     val streetViewUrl: String? = null,
     val streetViewUrls: Map<String, String>? = null
 )
 
 @Serializable
 data class BackendStreetViewData(
-    val embedUrl: String,
-    // KORRIGIERT: Verwende String statt JsonElement für bessere Kompatibilität
+    // KORRIGIERT: Basierend auf den echten Backend-Logs
+    val interactive: String? = null,
+    val static: String? = null,
+    val embedUrl: String = "",
+    val fallback: String? = null,
+    // Zusätzliche Felder für Kompatibilität
     val nativeConfig: String? = null,
-    val responsive: Map<String, String>? = null,
-    val fallback: String? = null
+    val responsive: Map<String, String>? = null
 )
 
 @Serializable
@@ -361,4 +357,51 @@ data class EnhancedBackendLocation(
     val hints: Map<String, String> = emptyMap(),
     val viewCount: Int = 0,
     val streetView: InteractiveStreetView? = null // NEW: Embedded Street View
+)
+
+// NEUE: Street View Diagnostic API Integration
+@Serializable
+data class StreetViewDiagnosticRequest(
+    val latitude: Double,
+    val longitude: Double,
+    val heading: Int? = null,
+    val pitch: Int? = null,
+    val fov: Int? = null,
+    val responsive: Boolean = true
+)
+
+@Serializable
+data class StreetViewDiagnosticResponse(
+    val success: Boolean,
+    val data: StreetViewDiagnosticData
+)
+
+@Serializable
+data class StreetViewDiagnosticData(
+    // Primary: Interaktive URL (kann fehlschlagen)
+    val embedUrl: String,
+    // Fallback: Statische URL (funktioniert immer)
+    val fallback: String,
+    // Empfehlung basierend auf Zuverlässigkeit
+    val recommended: String, // "static" oder "interactive"
+    // Mehrere Optionen für das Frontend
+    val alternatives: StreetViewAlternatives
+)
+
+@Serializable
+data class StreetViewAlternatives(
+    val static: String,
+    val iframe: String,
+    val mapillary: String? = null // Falls verfügbar
+)
+
+// Konfiguration für Street View-Anzeige
+@Serializable
+data class StreetViewConfig(
+    val mode: String, // "interactive", "static", "fallback_image"
+    val url: String,
+    val isReliable: Boolean,
+    val quality: String, // "high", "medium", "low"
+    val hasNavigation: Boolean,
+    val errorMessage: String? = null
 )

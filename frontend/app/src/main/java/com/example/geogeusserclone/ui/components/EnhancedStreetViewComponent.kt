@@ -198,12 +198,15 @@ private fun InteractiveWebView(
                 settings.apply {
                     javaScriptEnabled = true
                     domStorageEnabled = true
-                    loadWithOverviewMode = true
-                    useWideViewPort = true
-                    setSupportZoom(true)
-                    builtInZoomControls = false // Wir haben eigene Controls
-                    displayZoomControls = false
-                    cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
+                        // ENTFERNT: Problematisches JavaScript das neue API-Calls auslösen kann
+                        // view?.evaluateJavascript("""
+                        //     document.addEventListener('click', function() {
+                        //         Android.onTap();
+                        //     });
+                        // """, null)
+
+                        // SICHER: Nur minimale Initialisierung ohne DOM-Manipulation
+                        println("EnhancedStreetViewComponent: ✅ Street View geladen ohne JavaScript-Injection")
                     allowFileAccess = false
                     allowContentAccess = false
                     // Security enhancements

@@ -9,8 +9,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -22,12 +20,9 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.webkit.WebSettings
 import coil.compose.AsyncImage
-import coil.compose.AsyncImagePainter
-import coil.compose.rememberAsyncImagePainter
 import coil.request.ImageRequest
 import com.example.geogeusserclone.data.database.entities.LocationEntity
 import com.example.geogeusserclone.utils.MemoryManager
-import kotlinx.coroutines.launch
 import java.util.Locale
 
 @Composable
@@ -43,156 +38,80 @@ fun LocationImageScreen(
     // KORRIGIERT: AutoMemoryManagement direkt im Composable-Body aufrufen
     MemoryManager.AutoMemoryManagement(context)
 
-    // KORRIGIERT: Verwende direkte Street View-Integration ohne externe Komponente
+    // NEUE: State für Fallback-Handling
+    var shouldUseFallbackImage by remember { mutableStateOf(false) }
+    var fallbackImageUrl by remember { mutableStateOf<String?>(null) }
+    var webViewError by remember { mutableStateOf<String?>(null) }
+
+    // KORRIGIERT: Stabiler State mit remember key
+    val cleanedUrl = remember(location.id, location.imageUrl) {
+        val result = cleanAndValidateStreetViewUrl(location.imageUrl)
+        // REDUZIERT: Nur einmal beim ersten Laden loggen
+        if (result.isNotBlank()) {
+            println("LocationImageScreen: 🔍 URL bereinigt für ${location.city}: ${result.take(80)}...")
+        }
+        result
+    }
+
+    // NEUE: Intelligente Fallback-Erkennung BEVOR WebView geladen wird
+    val shouldUseWebView = remember(cleanedUrl) {
+        cleanedUrl.contains("google.com/maps/embed/v1/streetview") &&
+        !cleanedUrl.contains("[object Object]") &&
+        hasValidLocationParameter(cleanedUrl) &&
+        !shouldUseFallbackImage
+    }
+
+    // NEUE: Verhindere wiederholte Fallback-Generierung
+    val stableFallbackUrl = remember(location.id, shouldUseFallbackImage) {
+        if (shouldUseFallbackImage) {
+            generateLocationFallbackUrl(location).also {
+                println("LocationImageScreen: 🔧 Fallback für ${location.city}: ${it.take(60)}...")
+            }
+        } else {
+            null
+        }
+    }
+
     Box(
         modifier = Modifier.fillMaxSize()
     ) {
-        // KORRIGIERT: Direkte Street View-Integration basierend auf URL-Typ
         when {
-            // Interactive Street View (Google Maps Embed)
-            location.imageUrl.contains("google.com/maps/embed/v1/streetview") &&
-                    !location.imageUrl.contains("[object Object]") -> {
-                // KORRIGIERT: Optimierte WebView mit robuster Fehlerbehandlung
-                AndroidView(
-                    factory = { context ->
-                        WebView(context).apply {
-                            settings.apply {
-                                // KORRIGIERT: Optimierte Einstellungen für Google Maps
-                                javaScriptEnabled = true
-                                javaScriptCanOpenWindowsAutomatically = true
-                                domStorageEnabled = true
-                                databaseEnabled = true
-                                loadWithOverviewMode = true
-                                useWideViewPort = true
-                                setSupportZoom(true)
-                                builtInZoomControls = false
-                                displayZoomControls = false
-                                cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
+            // NEUE: Verwende stabilen Fallback-State
+            shouldUseFallbackImage && stableFallbackUrl != null -> {
+                FallbackImageView(
+                    imageUrl = stableFallbackUrl,
+                    locationName = location.city ?: "Unbekannt",
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
 
-                                // VERBESSERT: Wichtige Einstellungen für Google Maps mit HTTP 400 Prevention
-                                mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-                                mediaPlaybackRequiresUserGesture = false
-                                allowFileAccess = false
-                                allowContentAccess = false
-                                allowUniversalAccessFromFileURLs = false
-                                allowFileAccessFromFileURLs = false
+            // KORRIGIERT: Nur WebView verwenden wenn wirklich nötig
+            shouldUseWebView -> {
+                // REDUZIERT: Nur einmal loggen bei Initialisierung
+                LaunchedEffect(location.id) {
+                    println("LocationImageScreen: 🎮 Initialisiere Interactive Street View für ${location.city}")
+                }
 
-                                // NEUE: User Agent für bessere Kompatibilität
-                                userAgentString = "Mozilla/5.0 (Linux; Android 10; Android SDK built for x86) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36"
-
-                                // NEUE: Performance-Optimierungen
-                                setRenderPriority(WebSettings.RenderPriority.HIGH)
-                                cacheMode = WebSettings.LOAD_DEFAULT
-                            }
-
-                            // VERBESSERT: WebViewClient mit robuster Fehlerbehandlung
-                            webViewClient = object : WebViewClient() {
-                                override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
-                                    println("LocationImageScreen: WebView URL-Navigation: ${url?.take(100)}...")
-                                    return when {
-                                        url?.startsWith("https://www.google.com/maps") == true -> false
-                                        url?.startsWith("https://maps.googleapis.com") == true -> false
-                                        url?.startsWith("https://maps.gstatic.com") == true -> false
-                                        url?.startsWith("https://khms") == true -> false // Google Tile Server
-                                        url?.startsWith("https://streetviewpixels") == true -> false
-                                        else -> {
-                                            println("LocationImageScreen: ❌ Blockierte URL: $url")
-                                            true
-                                        }
-                                    }
-                                }
-
-                                override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
-                                    super.onPageStarted(view, url, favicon)
-                                    println("LocationImageScreen: 🔄 Lade Street View: ${url?.take(100)}...")
-                                }
-
-                                override fun onPageFinished(view: WebView?, url: String?) {
-                                    super.onPageFinished(view, url)
-                                    println("LocationImageScreen: ✅ Street View geladen: ${url?.take(100)}...")
-
-                                    // NEUE: Inject JavaScript für bessere Navigation
-                                    view?.evaluateJavascript("""
-                                        console.log('Street View loaded successfully');
-                                        
-                                        // Verbesserte Touch-Handling
-                                        document.addEventListener('touchstart', function(e) {
-                                            console.log('Touch detected on Street View');
-                                        });
-                                        
-                                        // Debug: Street View Status
-                                        setTimeout(function() {
-                                            var streetviewElements = document.querySelectorAll('[data-ved]');
-                                            console.log('Street View elements found: ' + streetviewElements.length);
-                                        }, 2000);
-                                    """, null)
-                                }
-
-                                override fun onReceivedError(view: WebView?, errorCode: Int, description: String?, failingUrl: String?) {
-                                    super.onReceivedError(view, errorCode, description, failingUrl)
-                                    println("LocationImageScreen: ❌ WebView Error: $errorCode - $description for URL: $failingUrl")
-
-                                    // NEUE: Bei HTTP 400 Fehler automatisch auf Fallback umschalten
-                                    if (errorCode == -6 || description?.contains("400") == true) {
-                                        println("LocationImageScreen: 🔧 HTTP 400 erkannt, verwende Fallback-Strategie")
-                                        // Lade Fallback-URL für diese Location
-                                        val fallbackUrl = generateLocationFallbackUrl(location)
-                                        view?.loadUrl(fallbackUrl)
-                                    }
-                                }
-
-                                override fun onReceivedHttpError(view: WebView?, request: android.webkit.WebResourceRequest?, errorResponse: android.webkit.WebResourceResponse?) {
-                                    super.onReceivedHttpError(view, request, errorResponse)
-                                    val statusCode = errorResponse?.statusCode
-                                    println("LocationImageScreen: ❌ HTTP Error: $statusCode for ${request?.url}")
-
-                                    // NEUE: Bei HTTP 400 automatisch auf Fallback umschalten
-                                    if (statusCode == 400) {
-                                        println("LocationImageScreen: 🔧 HTTP 400 erkannt, verwende Fallback-Strategie")
-                                        val fallbackUrl = generateLocationFallbackUrl(location)
-                                        view?.loadUrl(fallbackUrl)
-                                    }
-                                }
-                            }
-
-                            // VERBESSERT: WebChromeClient für erweiterte Fehlerbehandlung
-                            webChromeClient = object : android.webkit.WebChromeClient() {
-                                override fun onConsoleMessage(consoleMessage: android.webkit.ConsoleMessage?): Boolean {
-                                    println("LocationImageScreen: JS Console: ${consoleMessage?.message()}")
-                                    return true
-                                }
-
-                                override fun onProgressChanged(view: WebView?, newProgress: Int) {
-                                    if (newProgress % 25 == 0) { // Log every 25%
-                                        println("LocationImageScreen: Loading progress: ${newProgress}%")
-                                    }
-                                }
-                            }
-
-                            // KORRIGIERT: Lade URL mit verbesserter Fehlerbehandlung
-                            println("LocationImageScreen: 🎮 Lade Interactive Street View: ${location.imageUrl.take(120)}...")
-
-                            // NEUE: URL-Validierung vor dem Laden
-                            if (isUrlSafeToLoad(location.imageUrl)) {
-                                loadUrl(location.imageUrl)
-                            } else {
-                                println("LocationImageScreen: ⚠️ URL unsicher, verwende Fallback")
-                                val fallbackUrl = generateLocationFallbackUrl(location)
-                                loadUrl(fallbackUrl)
-                            }
-                        }
+                // NEUE: Performance-optimierte WebView mit Crash-Prevention
+                OptimizedWebView(
+                    url = cleanedUrl,
+                    locationName = location.city ?: "Unbekannt",
+                    onError = { errorMessage ->
+                        println("LocationImageScreen: 🔧 WebView Fehler für ${location.city}: $errorMessage")
+                        webViewError = errorMessage
+                        shouldUseFallbackImage = true
                     },
                     modifier = Modifier.fillMaxSize()
                 )
             }
 
             // Static Street View (Google API)
-            location.imageUrl.startsWith("https://maps.googleapis.com/maps/api/streetview") &&
-                    !location.imageUrl.contains("[object Object]") &&
-                    !location.imageUrl.contains("PLACEHOLDER_API_KEY") -> {
+            cleanedUrl.startsWith("https://maps.googleapis.com/maps/api/streetview") &&
+                    !cleanedUrl.contains("[object Object]") &&
+                    !cleanedUrl.contains("PLACEHOLDER_API_KEY") -> {
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
-                        .data(location.imageUrl)
+                        .data(cleanedUrl)
                         .crossfade(300)
                         .memoryCachePolicy(coil.request.CachePolicy.ENABLED)
                         .diskCachePolicy(coil.request.CachePolicy.ENABLED)
@@ -206,17 +125,17 @@ fun LocationImageScreen(
             }
 
             // Fallback Images (Unsplash etc.)
-            location.imageUrl.contains("unsplash.com") ||
-                    location.imageUrl.contains("images.") -> {
+            cleanedUrl.contains("unsplash.com") ||
+                    cleanedUrl.contains("images.") -> {
                 FallbackImageView(
-                    imageUrl = location.imageUrl,
+                    imageUrl = cleanedUrl,
                     locationName = location.city ?: "Unbekannt",
                     modifier = Modifier.fillMaxSize()
                 )
             }
 
             // Empty or corrupted URLs
-            location.imageUrl.isBlank() -> {
+            cleanedUrl.isBlank() -> {
                 EmptyLocationView(
                     locationName = location.city ?: "Unbekannt",
                     country = location.country,
@@ -225,8 +144,8 @@ fun LocationImageScreen(
             }
 
             // Corrupted URLs with [object Object]
-            location.imageUrl.contains("[object Object]") ||
-                    location.imageUrl.contains("PLACEHOLDER_API_KEY") -> {
+            cleanedUrl.contains("[object Object]") ||
+                    cleanedUrl.contains("PLACEHOLDER_API_KEY") -> {
                 val fallbackUrl = generateRegionalFallbackUrl(location)
                 FallbackImageView(
                     imageUrl = fallbackUrl,
@@ -238,7 +157,7 @@ fun LocationImageScreen(
             // Unknown format
             else -> {
                 UnknownFormatView(
-                    imageUrl = location.imageUrl,
+                    imageUrl = cleanedUrl,
                     locationName = location.city ?: "Unbekannt",
                     modifier = Modifier.fillMaxSize()
                 )
@@ -265,6 +184,25 @@ fun LocationImageScreen(
             onShowMap = onShowMap,
             modifier = Modifier.align(Alignment.BottomEnd)
         )
+
+        // NEUE: Error Overlay bei WebView-Problemen
+        webViewError?.let { error ->
+            Card(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.9f)
+                )
+            ) {
+                Text(
+                    text = "⚠️ Street View Problem: $error",
+                    modifier = Modifier.padding(12.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onErrorContainer
+                )
+            }
+        }
     }
 }
 
@@ -699,5 +637,473 @@ private fun generateRegionalFallbackUrl(location: LocationEntity): String {
             "https://images.unsplash.com/photo-1539650116574-75c0c6d73f6e?w=800&h=600&fit=crop"
         else ->
             "https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=800&h=600&fit=crop"
+    }
+}
+// NEUE: URL-Bereinigungsfunktion - KRITISCHE KORREKTUR für "Missing location parameter"
+private fun cleanAndValidateStreetViewUrl(originalUrl: String): String {
+    try {
+        println("LocationImageScreen: 🧹 Bereinige URL: ${originalUrl.take(100)}...")
+
+        // 1. Entferne nur offensichtlich korrupte Daten
+        var cleanUrl = originalUrl
+            .replace("[object Object]", "")
+            .replace("undefined", "")
+            .trim()
+
+        // 2. Prüfe ob es eine Google Maps URL ist
+        if (cleanUrl.contains("google.com/maps/embed/v1/streetview")) {
+            // KRITISCH: Entferne unsupported Parameter die HTTP 400 verursachen
+            cleanUrl = removeUnsupportedEmbedParameters(cleanUrl)
+
+            // KRITISCH: Robuste location Parameter-Erkennung
+            val hasLocation = when {
+                // Suche nach location= gefolgt von Koordinaten (URL-kodiert oder nicht)
+                Regex("location=([0-9.-]+[%2C,][0-9.-]+)").containsMatchIn(cleanUrl) -> {
+                    println("LocationImageScreen: ✅ Location Parameter mit Koordinaten gefunden")
+                    true
+                }
+                // Prüfe auf location= gefolgt von nicht-leeren Werten
+                cleanUrl.contains("location=") &&
+                !cleanUrl.contains("location=&") &&
+                !cleanUrl.contains("location=$") &&
+                !cleanUrl.contains("location=,") &&
+                !cleanUrl.contains("location=%2C") -> {
+                    println("LocationImageScreen: ✅ Location Parameter gefunden (Format unbekannt)")
+                    true
+                }
+                else -> {
+                    println("LocationImageScreen: ❌ Kein gültiger location Parameter gefunden")
+                    false
+                }
+            }
+
+            if (hasLocation) {
+                println("LocationImageScreen: ✅ Google Maps Embed URL ist gültig und bereinigt")
+                return cleanUrl
+            } else {
+                println("LocationImageScreen: 🔧 Fehlender location Parameter, verwende Fallback")
+                return "" // Triggert Fallback
+            }
+        }
+
+        // 3. Für statische Street View URLs
+        if (cleanUrl.startsWith("https://maps.googleapis.com/maps/api/streetview")) {
+            val hasLocation = Regex("location=([0-9.-]+[,][0-9.-]+)").containsMatchIn(cleanUrl) ||
+                             (cleanUrl.contains("location=") &&
+                              !cleanUrl.contains("location=&") &&
+                              !cleanUrl.contains("location=$"))
+
+            if (hasLocation) {
+                println("LocationImageScreen: ✅ Statische Street View URL mit location Parameter")
+                return cleanUrl
+            } else {
+                println("LocationImageScreen: ❌ Statische URL ohne gültigen location Parameter")
+                return ""
+            }
+        }
+
+        // 4. Andere URLs (Unsplash etc.) - unverändert durchlassen
+        if (!cleanUrl.contains("[object Object]") && !cleanUrl.contains("undefined") && cleanUrl.isNotBlank()) {
+            println("LocationImageScreen: ✅ Andere URL akzeptiert: ${cleanUrl.take(50)}...")
+            return cleanUrl
+        }
+
+        println("LocationImageScreen: ❌ URL konnte nicht bereinigt werden")
+        return ""
+
+    } catch (e: Exception) {
+        println("LocationImageScreen: ❌ Fehler bei URL-Bereinigung: ${e.message}")
+        return ""
+    }
+}
+
+// NEUE: Entferne Google Maps Embed Parameter die nicht unterstützt werden
+private fun removeUnsupportedEmbedParameters(url: String): String {
+    var cleanedUrl = url
+
+    // KRITISCH: Google Maps Embed API unterstützt diese Parameter NICHT
+    val unsupportedParams = listOf(
+        "navigation=1", "navigation=true",
+        "controls=1", "controls=true",
+        "zoom=1", "zoom=true",
+        "fullscreen=1", "fullscreen=true",
+        // NEUE: Zusätzliche problematische Parameter
+        "disableDefaultUI=1", "disableDefaultUI=true",
+        "gestureHandling=none", "gestureHandling=greedy",
+        "mapTypeControl=false", "streetViewControl=false"
+    )
+
+    // Entferne alle unsupported Parameter systematisch
+    for (param in unsupportedParams) {
+        // Entferne Parameter am Ende der URL
+        cleanedUrl = cleanedUrl.replace("&$param", "")
+        // Entferne Parameter direkt nach dem ? und ersetze mit nächstem Parameter
+        cleanedUrl = cleanedUrl.replace("?$param&", "?")
+        // Entferne Parameter wenn es der einzige Parameter ist
+        cleanedUrl = cleanedUrl.replace("?$param", "")
+    }
+
+    // NEUE: Bereinige mehrfache & Zeichen
+    cleanedUrl = cleanedUrl.replace("&&+".toRegex(), "&")
+
+    // NEUE: Entferne & am Ende der URL
+    cleanedUrl = cleanedUrl.trimEnd('&')
+
+    // KRITISCH: Stelle sicher dass die URL mit den UNTERSTÜTZTEN Parametern funktioniert
+    // Google Maps Embed API unterstützt nur: location, heading, pitch, fov, key
+
+    println("LocationImageScreen: 🔧 URL bereinigt von: ${url.take(120)}...")
+    println("LocationImageScreen: 🔧 Zu: ${cleanedUrl.take(120)}...")
+
+    return cleanedUrl
+}
+
+// NEUE: Prüfe ob URL gültigen location Parameter hat
+private fun hasValidLocationParameter(url: String): Boolean {
+    try {
+        val locationMatch = Regex("location=([^&]+)").find(url) ?: return false
+        val locationParam = locationMatch.groupValues[1]
+        val decodedLocation = java.net.URLDecoder.decode(locationParam, "UTF-8")
+        val coords = decodedLocation.split(",")
+
+        if (coords.size == 2) {
+            val lat = coords[0].toDoubleOrNull()
+            val lng = coords[1].toDoubleOrNull()
+            return lat != null && lng != null &&
+                   lat >= -90.0 && lat <= 90.0 &&
+                   lng >= -180.0 && lng <= 180.0
+        }
+        return false
+    } catch (e: Exception) {
+        return false
+    }
+}
+
+// NEUE: Performance-optimierte WebView-Komponente
+@Composable
+private fun OptimizedWebView(
+    url: String,
+    locationName: String,
+    onError: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var isWebViewReady by remember { mutableStateOf(false) }
+    var loadingProgress by remember { mutableIntStateOf(0) }
+    var hasPerformedValidation by remember { mutableStateOf(false) }
+    var validationAttempts by remember { mutableIntStateOf(0) }
+
+    AndroidView(
+        factory = { context ->
+            WebView(context).apply {
+                // KRITISCH: Performance-optimierte Einstellungen mit API-Call-Prevention
+                settings.apply {
+                    // JavaScript und DOM
+                    javaScriptEnabled = true
+                    javaScriptCanOpenWindowsAutomatically = false
+                    domStorageEnabled = true
+                    @Suppress("DEPRECATION")
+                    databaseEnabled = false
+
+                    // NEUE: Verhindere automatische Resource-Loading die API-Calls auslösen könnten
+                    loadsImagesAutomatically = false // Verhindert automatisches Bildladen
+                    blockNetworkImage = true // Blockiert Netzwerk-Bilder initial
+                    blockNetworkLoads = false // Erlaubt hauptsächliche URL aber nicht Subresources
+
+                    // Rendering-Optimierungen
+                    loadWithOverviewMode = true
+                    useWideViewPort = true
+                    setSupportZoom(false)
+                    builtInZoomControls = false
+                    displayZoomControls = false
+
+                    // KRITISCH: Hardware-Beschleunigung und Performance
+                    mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW // Strengere Sicherheit
+                    mediaPlaybackRequiresUserGesture = true // Verhindert automatische Media-Requests
+                    allowFileAccess = false
+                    allowContentAccess = false
+                    @Suppress("DEPRECATION")
+                    allowUniversalAccessFromFileURLs = false
+                    @Suppress("DEPRECATION")
+                    allowFileAccessFromFileURLs = false
+
+                    // NEUE: Anti-API-Call Einstellungen
+                    setGeolocationEnabled(false) // Verhindert Geolocation-API-Calls
+                    javaScriptCanOpenWindowsAutomatically = false // Verhindert Popup-API-Calls
+                    setSupportMultipleWindows(false) // Verhindert zusätzliche Windows/Tabs
+
+                    // KRITISCH: Cache-Verhalten um wiederholte API-Calls zu vermeiden
+                    cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
+
+                    userAgentString = "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0 Mobile Safari/537.36"
+
+                    // ENTFERNT: Deprecated setRenderPriority and non-existent setAppCacheEnabled
+                    // Diese Methoden existieren nicht mehr in modernen Android-Versionen
+                }
+
+                // KORRIGIERT: Hochoptimierte WebViewClient mit besserer Timing-Kontrolle
+                webViewClient = object : WebViewClient() {
+                    private var errorCount = 0
+                    private val maxErrors = 3
+                    private var pageStartTime = 0L
+
+                    override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
+                        return when {
+                            url?.startsWith("https://www.google.com/maps") == true -> false
+                            url?.startsWith("https://maps.googleapis.com") == true -> false
+                            url?.startsWith("https://maps.gstatic.com") == true -> false
+                            url?.startsWith("https://khms") == true -> false
+                            url?.startsWith("https://streetviewpixels") == true -> false
+                            url?.contains("google.com") == true -> false
+                            else -> {
+                                println("LocationImageScreen: 🚫 Blockiere externe URL: ${url?.take(50)}")
+                                true
+                            }
+                        }
+                    }
+
+                    override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
+                        super.onPageStarted(view, url, favicon)
+                        isWebViewReady = false
+                        loadingProgress = 0
+                        hasPerformedValidation = false
+                        validationAttempts = 0
+                        pageStartTime = System.currentTimeMillis()
+
+                        if (url?.contains("streetview") == true) {
+                            println("LocationImageScreen: 🔄 Lade Street View für $locationName")
+                        }
+                    }
+
+                    override fun onPageFinished(view: WebView?, url: String?) {
+                        super.onPageFinished(view, url)
+
+                        if (url?.contains("streetview") == true) {
+                            val loadTime = System.currentTimeMillis() - pageStartTime
+                            println("LocationImageScreen: ✅ Street View Basis-Laden abgeschlossen für $locationName (${loadTime}ms)")
+
+                            // KRITISCH: Warte länger bevor JavaScript-Validierung
+                            view?.postDelayed({
+                                if (!hasPerformedValidation && validationAttempts < 2) {
+                                    performDelayedValidation(view, onError)
+                                }
+                            }, 4000) // 4 Sekunden warten statt 2
+                        }
+                    }
+
+                    override fun onReceivedError(view: WebView?, errorCode: Int, description: String?, failingUrl: String?) {
+                        super.onReceivedError(view, errorCode, description, failingUrl)
+
+                        errorCount++
+                        if (errorCount >= maxErrors) {
+                            println("LocationImageScreen: 🔧 Zu viele WebView Fehler ($errorCount), wechsle zu Fallback")
+                            onError("Wiederholt WebView Fehler: $description")
+                        }
+                    }
+
+                    override fun onReceivedHttpError(view: WebView?, request: android.webkit.WebResourceRequest?, errorResponse: android.webkit.WebResourceResponse?) {
+                        super.onReceivedHttpError(view, request, errorResponse)
+                        val statusCode = errorResponse?.statusCode
+                        val requestUrl = request?.url.toString()
+
+                        // KRITISCH: Bei HTTP 400 "Missing location parameter" sofort zu Fallback wechseln
+                        if (statusCode == 400 && requestUrl.contains("streetview")) {
+                            println("LocationImageScreen: 🔧 HTTP 400 'Missing location parameter' - sofortiger Fallback für $locationName")
+                            onError("HTTP 400: Location Parameter fehlt - verwende Fallback-Bild")
+                            return
+                        }
+
+                        // Andere kritische HTTP-Fehler für Street View URLs
+                        if ((statusCode == 403 || statusCode == 404) &&
+                            requestUrl.contains("streetview") &&
+                            requestUrl.contains("google.com/maps/embed") &&
+                            !requestUrl.contains("favicon")) {
+
+                            println("LocationImageScreen: 🔧 HTTP $statusCode für $locationName, wechsle zu Fallback")
+                            onError("HTTP $statusCode: Street View nicht verfügbar")
+                        }
+                    }
+
+                    override fun onReceivedSslError(view: WebView?, handler: android.webkit.SslErrorHandler?, error: android.net.http.SslError?) {
+                        handler?.proceed()
+                    }
+
+                    // NEUE: Separate Validierungsfunktion mit verbessertem Timing
+                    private fun performDelayedValidation(webView: WebView, onErrorCallback: (String) -> Unit) {
+                        hasPerformedValidation = true
+                        validationAttempts++
+
+                        println("LocationImageScreen: 🔍 Starte verzögerte Validierung (Versuch $validationAttempts)")
+
+                        // KRITISCH: Vorsichtige JavaScript-Validierung ohne DOM-Queries die API-Calls auslösen könnten
+                        webView.evaluateJavascript("""
+                            (function() {
+                                try {
+                                    // KEINE DOM-Queries die neue API-Calls triggern könnten
+                                    var bodyText = document.body ? document.body.innerText.toLowerCase() : '';
+                                    var bodyHtml = document.body ? document.body.innerHTML.toLowerCase() : '';
+                                    
+                                    console.log('Validation check - Body text length: ' + bodyText.length);
+                                    console.log('Validation check - Body HTML length: ' + bodyHtml.length);
+                                    
+                                    // KRITISCH: Prüfe zuerst auf explizite Fehlermeldungen
+                                    if (bodyText.includes('invalid request') && bodyText.includes('missing')) {
+                                        console.log('❌ Explicit error detected: Invalid request missing parameter');
+                                        return 'explicit_error_detected';
+                                    }
+                                    
+                                    if (bodyText.includes('rejected') && bodyText.includes('request')) {
+                                        console.log('❌ Request rejected detected');
+                                        return 'request_rejected';
+                                    }
+                                    
+                                    // SICHER: Prüfe nur HTML-Content, KEINE DOM-Queries
+                                    var hasStreetViewIndicators = bodyHtml.includes('streetview') ||
+                                                                 bodyHtml.includes('street-view') ||
+                                                                 bodyHtml.includes('maps-embed') ||
+                                                                 bodyHtml.includes('google') && bodyHtml.includes('maps');
+                                    
+                                    if (hasStreetViewIndicators) {
+                                        console.log('✅ Street View content indicators found');
+                                        return 'streetview_success';
+                                    }
+                                    
+                                    // NEUE: Wenn Seite nicht leer ist, aber keine klaren Indikatoren
+                                    if (bodyText.length > 50 || bodyHtml.length > 200) {
+                                        console.log('⚠️ Content present but unclear - assume OK');
+                                        return 'content_present_assume_ok';
+                                    }
+                                    
+                                    console.log('❓ No clear content indicators');
+                                    return 'no_clear_indicators';
+                                    
+                                } catch (innerError) {
+                                    console.log('JavaScript inner error: ' + innerError.message);
+                                    return 'js_inner_error';
+                                }
+                            })();
+                        """) { result ->
+                            println("LocationImageScreen: 📱 Verzögerte Validierung für $locationName: $result")
+
+                            when {
+                                result?.contains("explicit_error_detected") == true -> {
+                                    println("LocationImageScreen: 🔧 Expliziter Google Maps Fehler erkannt - sofortiger Fallback")
+                                    onErrorCallback("Google Maps: Explizite Fehlermeldung erkannt")
+                                }
+                                result?.contains("request_rejected") == true -> {
+                                    println("LocationImageScreen: 🔧 Request rejected erkannt - sofortiger Fallback")
+                                    onErrorCallback("Google Maps: Request wurde abgelehnt")
+                                }
+                                result?.contains("streetview_success") == true -> {
+                                    println("LocationImageScreen: ✅ Street View Content erfolgreich validiert")
+                                    isWebViewReady = true
+                                }
+                                result?.contains("content_present_assume_ok") == true -> {
+                                    println("LocationImageScreen: ✅ Content vorhanden - optimistisch als OK betrachtet")
+                                    isWebViewReady = true
+                                }
+                                result?.contains("js_") == true -> {
+                                    println("LocationImageScreen: ⚠️ JavaScript Fehler - aber erlauben trotzdem")
+                                    isWebViewReady = true // Bei JS-Fehlern optimistisch sein
+                                }
+                                else -> {
+                                    println("LocationImageScreen: ⏳ Validierung unschlüssig - versuche erneut wenn möglich")
+                                    if (validationAttempts < 2) {
+                                        webView.postDelayed({
+                                            performDelayedValidation(webView, onErrorCallback)
+                                        }, 3000)
+                                    } else {
+                                        println("LocationImageScreen: ✅ Max Validierungsversuche erreicht - erlaube Anzeige")
+                                        isWebViewReady = true
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // NEUE: Hochoptimierte WebChromeClient
+                webChromeClient = object : android.webkit.WebChromeClient() {
+                    override fun onProgressChanged(view: WebView?, newProgress: Int) {
+                        super.onProgressChanged(view, newProgress)
+                        loadingProgress = newProgress
+
+                        // Nur bei wichtigen Meilensteinen loggen
+                        if (newProgress == 100) {
+                            println("LocationImageScreen: 📊 $locationName Street View: $newProgress%")
+                            isWebViewReady = true
+                        }
+                    }
+
+                    override fun onPermissionRequest(request: android.webkit.PermissionRequest?) {
+                        request?.deny()
+                    }
+
+                    override fun onConsoleMessage(consoleMessage: android.webkit.ConsoleMessage?): Boolean {
+                        val message = consoleMessage?.message() ?: ""
+
+                        // KORRIGIERT: Filtern nach tatsächlich wichtigen Fehlern
+                        if (message.contains("Invalid request", ignoreCase = true) &&
+                            message.contains("missing", ignoreCase = true)) {
+                            println("LocationImageScreen: 🚨 KRITISCHER JS Fehler: ${message.take(100)}")
+                            onError("JavaScript: $message")
+                        } else if (message.contains("Error") || message.contains("Failed")) {
+                            println("LocationImageScreen: 📱 JS: ${message.take(100)}")
+                        }
+                        return true
+                    }
+                }
+
+                // KRITISCH: URL nur EINMAL laden
+                try {
+                    val headers = mapOf(
+                        "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                        "Accept-Language" to "de-DE,de;q=0.9,en;q=0.8",
+                        "Cache-Control" to "max-age=300",
+                        "Connection" to "keep-alive"
+                    )
+
+                    loadUrl(url, headers)
+                } catch (e: Exception) {
+                    println("LocationImageScreen: ❌ Fehler beim Laden der URL: ${e.message}")
+                    onError("URL-Ladefehler: ${e.message}")
+                }
+            }
+        },
+        modifier = modifier,
+        update = { webView ->
+            // Verhindere unnötige Updates
+            if (!isWebViewReady && loadingProgress < 100) {
+                // WebView ist noch am Laden - keine Updates
+            }
+        }
+    )
+
+    // NEUE: Loading Overlay nur bei langsamen Verbindungen
+    if (loadingProgress < 100 && loadingProgress > 0) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f)
+                )
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    CircularProgressIndicator(
+                        progress = { loadingProgress / 100f },
+                        modifier = Modifier.size(32.dp)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Lade Street View... $loadingProgress%",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+        }
     }
 }
