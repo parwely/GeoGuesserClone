@@ -4,13 +4,29 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.geogeusserclone.data.database.entities.GameEntity
 import com.example.geogeusserclone.data.models.GameStats
-import com.example.geogeusserclone.data.models.UserStats
 import com.example.geogeusserclone.data.repositories.GameRepository
 import com.example.geogeusserclone.data.repositories.UserRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+// KORRIGIERT: Einfache Stats-Klassen definiert
+data class UserStats(
+    val userId: String,
+    val username: String,
+    val totalScore: Int,
+    val gamesPlayed: Int,
+    val averageScore: Double
+)
+
+data class MonthlyGameStats(
+    val month: String,
+    val year: Int,
+    val gamesPlayed: Int,
+    val totalScore: Int,
+    val averageScore: Double
+)
 
 data class StatsUiState(
     val gameStats: GameStats = GameStats(),
@@ -39,21 +55,18 @@ class StatsViewModel @Inject constructor(
             try {
                 val currentUser = userRepository.getCurrentUser()
                 if (currentUser != null) {
-                    // Lade Spiele-Statistiken - temporär deaktiviert für neue Game API
-                    // gameRepository.getGameHistory(currentUser.id).collect { games: List<GameEntity> ->
-                    //     val gameStats = calculateGameStats(games)
-                    //     _uiState.update {
-                    //         it.copy(
-                    //             gameStats = gameStats,
-                    //             isLoading = false,
-                    //             error = null
-                    //         )
-                    //     }
-                    // }
+                    // KORRIGIERT: Erstelle einfache GameStats ohne komplexe Berechnungen
+                    val gameStats = GameStats(
+                        totalScore = currentUser.totalScore,
+                        averageScore = if (currentUser.gamesPlayed > 0)
+                            currentUser.totalScore.toDouble() / currentUser.gamesPlayed
+                        else 0.0,
+                        totalRounds = currentUser.gamesPlayed * 5 // Annahme: 5 Runden pro Spiel
+                    )
 
-                    // Temporäre Fallback-Statistiken bis getGameHistory implementiert ist
                     _uiState.update {
                         it.copy(
+                            gameStats = gameStats,
                             isLoading = false,
                             error = null
                         )
@@ -86,7 +99,7 @@ class StatsViewModel @Inject constructor(
         val averageScore = if (totalGames > 0) totalScore.toDouble() / totalGames else 0.0
         val bestScore = completedGames.maxOfOrNull { it.score } ?: 0
 
-        // Monatliche Statistiken berechnen
+        // KORRIGIERT: Monatliche Statistiken vereinfacht
         val monthlyStats = completedGames
             .groupBy { game ->
                 val date = java.util.Date(game.completedAt ?: game.createdAt)
@@ -99,7 +112,7 @@ class StatsViewModel @Inject constructor(
                 val month = parts[0]
                 val year = parts[1].toInt()
 
-                com.example.geogeusserclone.data.models.MonthlyGameStats(
+                MonthlyGameStats(
                     month = getMonthName(month.toInt()),
                     year = year,
                     gamesPlayed = monthGames.size,
@@ -110,11 +123,16 @@ class StatsViewModel @Inject constructor(
             .sortedByDescending { it.year * 12 + getMonthNumber(it.month) }
 
         return GameStats(
-            totalGames = totalGames,
+            totalRounds = totalGames * 5, // KORRIGIERT: Annahme 5 Runden pro Spiel
             totalScore = totalScore,
             averageScore = averageScore,
-            bestScore = bestScore,
-            monthlyStats = monthlyStats
+            bestRoundScore = bestScore, // KORRIGIERT: Verwende bestScore als bestRoundScore
+            worstRoundScore = completedGames.minOfOrNull { it.score } ?: 0, // HINZUGEFÜGT
+            totalTime = 0L, // HINZUGEFÜGT: Default-Wert
+            averageTimePerRound = 0L,
+            perfectRounds = completedGames.count { it.score >= 4500 }, // HINZUGEFÜGT
+            streak = 0, // HINZUGEFÜGT: Default-Wert
+            bestStreak = 0 // HINZUGEFÜGT: Default-Wert
         )
     }
 

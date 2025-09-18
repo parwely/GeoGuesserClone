@@ -1,19 +1,57 @@
 ## 📋 Development Phases
-
+Github: https://github.com/parwely/GeoGuesserClone
 ### Phase 1: Foundation Setup (Week 1-2)
 
 #### Backend Development
-1. **Project Initialization** 
+1. **Project Initialization** DONE
+   - Set up Node.js project structure
+   - Configure Express.js server
+   - Implement basic routing
+   - Set up environment configuration
+
 2. **Database Setup**
+   - Create Neon PostgreSQL database
+   - Design and implement schema
+   - Set up PostGIS extension
+   - Create initial migrations
+
 3. **Authentication System**
+   - Implement JWT-based authentication
+   - Create user registration endpoint
+   - Build login/logout functionality
+   - Add password hashing with bcrypt
+
 4. **Location Management**
-   
+   - Design location data structure
+   - Create location seeding system
+   - Implement random location retrieval
+   - Add difficulty categorization
+
 #### Android Development
 1. **Project Setup**
+   - Create Android Studio project
+   - Configure Gradle dependencies
+   - Set up MVVM architecture
+   - Implement dependency injection
+
 2. **Core UI Components**
+   - Main menu activity
+   - Authentication screens
+   - Basic game activity layout
+   - Material Design theming
+
 3. **Local Database**
+   - Set up Room database
+   - Create entity models
+   - Implement DAOs
+   - Add offline caching logic
+
 4. **Networking Layer**
-   
+   - Configure Retrofit API service
+   - Implement authentication interceptor
+   - Add error handling
+   - Create repository pattern
+
 **Deliverables Phase 1:**
 - Working authentication system
 - Basic single-player game mode
@@ -23,8 +61,51 @@
 ### Phase 2: Core Game Features (Week 3-4)
 
 #### Game Logic Implementation
+1. **Single Player Mode**
+   - Location presentation system
+   - Interactive map for guessing
+   - Distance calculation (Haversine formula)
+   - Score calculation algorithm
+   - Round progression logic
+
+2. **Scoring System**
+   ```kotlin
+   object ScoreCalculator {
+       fun calculate(distanceKm: Double): Int {
+           return when {
+               distanceKm <= 1 -> 5000
+               distanceKm <= 10 -> (5000 - (distanceKm - 1) * 400).toInt()
+               distanceKm <= 100 -> (1400 - (distanceKm - 10) * 10).toInt()
+               else -> maxOf(0, (500 - (distanceKm - 100) * 2).toInt())
+           }
+       }
+   }
+   ```
+
+3. **Game State Management**
+   - Round tracking
+   - Timer functionality
+   - Result calculation
+   - Local score persistence
 
 #### UI/UX Development
+1. **Street View Component**
+   - 360-degree image viewer
+   - Touch navigation controls
+   - Zoom functionality
+   - Loading states
+
+2. **Map Interface**
+   - Interactive world map
+   - Guess placement marker
+   - Zoom/pan controls
+   - Location reveal animation
+
+3. **Score Display**
+   - Round results screen
+   - Distance visualization
+   - Score breakdown
+   - Performance statistics
 
 **Deliverables Phase 2:**
 - Complete single-player experience

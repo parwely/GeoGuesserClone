@@ -79,6 +79,14 @@
             android:theme="@style/Theme.GeoGeusserClone"
             android:hardwareAccelerated="true" />
 
+        <!-- NEUE: GameModeSelectionActivity für die Spielmodus-Auswahl -->
+        <activity
+            android:name="com.example.geogeusserclone.ui.activities.GameModeSelectionActivity"
+            android:exported="false"
+            android:theme="@style/Theme.GeoGeusserClone"
+            android:hardwareAccelerated="true"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
+
         <activity
             android:name="com.example.geogeusserclone.ui.activities.GameActivity"
             android:exported="false"

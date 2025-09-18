@@ -1,3 +1,15 @@
+/**
+ * AuthActivity.kt
+ *
+ * Diese Datei enthält die Authentifizierungs-Activity für die GeoGuess-App.
+ * Sie ist verantwortlich für das Login und die Registrierung neuer Benutzer.
+ *
+ * Architektur-Integration:
+ * - Activity-Layer: Stellt die UI für Authentifizierung bereit
+ * - ViewModel-Integration: Nutzt AuthViewModel für Geschäftslogik
+ * - Navigation: Leitet nach erfolgreichem Login zur MenuActivity weiter
+ * - Dependency Injection: Hilt-Annotationen für automatische Abhängigkeitsinjektion
+ */
 package com.example.geogeusserclone.ui.activities
 
 import android.content.Intent
@@ -20,17 +32,36 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.example.geogeusserclone.ui.theme.GeoGeusserCloneTheme
+import com.example.geogeusserclone.ui.theme.GeoGuessTheme
 import com.example.geogeusserclone.viewmodels.AuthViewModel
 import dagger.hilt.android.AndroidEntryPoint
 
+/**
+ * Haupt-Activity für Benutzerauthentifizierung
+ *
+ * Diese Activity behandelt sowohl Login als auch Registrierung in einer einzigen UI.
+ * Sie verwendet Jetpack Compose für die UI und Hilt für Dependency Injection.
+ *
+ * Features:
+ * - Umschaltung zwischen Login- und Registrierungs-Modi
+ * - Form-Validierung
+ * - Fehlerbehandlung
+ * - Automatische Navigation nach erfolgreichem Login
+ */
 @AndroidEntryPoint
 class AuthActivity : ComponentActivity() {
+
+    /**
+     * Initialisiert die Activity und setzt die Compose-UI
+     *
+     * Konfiguriert Edge-to-Edge-Display und definiert Navigation-Callbacks
+     * für erfolgreiche Authentifizierung.
+     */
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            GeoGeusserCloneTheme {
+            GeoGuessTheme {
                 AuthScreen(
                     onNavigateToMenu = {
                         startActivity(Intent(this, MenuActivity::class.java))
@@ -42,6 +73,15 @@ class AuthActivity : ComponentActivity() {
     }
 }
 
+/**
+ * Haupt-Composable für den Authentifizierungs-Bildschirm
+ *
+ * Verwaltet den Zustand zwischen Login- und Registrierungs-Modi und
+ * behandelt die automatische Navigation bei erfolgreichem Login.
+ *
+ * @param onNavigateToMenu Callback für Navigation zum Hauptmenü
+ * @param authViewModel ViewModel für Authentifizierungs-Geschäftslogik
+ */
 @Composable
 fun AuthScreen(
     onNavigateToMenu: () -> Unit,
@@ -50,7 +90,7 @@ fun AuthScreen(
     val authState by authViewModel.state.collectAsState()
     var isLoginMode by remember { mutableStateOf(true) }
 
-    // Navigation bei erfolgreichem Login
+    // Automatische Navigation bei erfolgreichem Login
     LaunchedEffect(authState.isLoggedIn) {
         if (authState.isLoggedIn) {
             onNavigateToMenu()
@@ -66,6 +106,7 @@ fun AuthScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
+            // App-Logo und Titel
             Text(
                 text = "🌍",
                 style = MaterialTheme.typography.displayLarge
@@ -74,12 +115,13 @@ fun AuthScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             Text(
-                text = "GeoGuessr Clone",
+                text = "GeoGuess",
                 style = MaterialTheme.typography.headlineLarge
             )
 
             Spacer(modifier = Modifier.height(48.dp))
 
+            // Dynamische Form-Anzeige basierend auf Modus
             if (isLoginMode) {
                 LoginForm(
                     onLogin = { email, password ->
@@ -98,7 +140,7 @@ fun AuthScreen(
                 )
             }
 
-            // Error Anzeige
+            // Fehleranzeige für Authentifizierungsfehler
             authState.error?.let { error ->
                 Spacer(modifier = Modifier.height(16.dp))
                 Card(
@@ -117,6 +159,16 @@ fun AuthScreen(
     }
 }
 
+/**
+ * Login-Formular Composable
+ *
+ * Stellt ein Formular für Benutzeranmeldung bereit mit E-Mail und Passwort-Feldern.
+ * Enthält Validierung und Sichtbarkeits-Toggle für Passwörter.
+ *
+ * @param onLogin Callback für Login-Versuch mit E-Mail und Passwort
+ * @param onSwitchToRegister Callback zum Wechseln zur Registrierung
+ * @param isLoading Zeigt an, ob gerade ein Login-Versuch läuft
+ */
 @Composable
 fun LoginForm(
     onLogin: (String, String) -> Unit,
@@ -138,6 +190,7 @@ fun LoginForm(
 
         Spacer(modifier = Modifier.height(24.dp))
 
+        // E-Mail Eingabefeld mit Validierung
         OutlinedTextField(
             value = email,
             onValueChange = { email = it },
@@ -149,6 +202,7 @@ fun LoginForm(
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // Passwort-Eingabefeld mit Sichtbarkeits-Toggle
         OutlinedTextField(
             value = password,
             onValueChange = { password = it },
@@ -169,6 +223,7 @@ fun LoginForm(
 
         Spacer(modifier = Modifier.height(24.dp))
 
+        // Login-Button mit Loading-Indikator
         Button(
             onClick = { onLogin(email, password) },
             modifier = Modifier.fillMaxWidth(),
@@ -183,6 +238,7 @@ fun LoginForm(
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // Link zur Registrierung
         TextButton(
             onClick = onSwitchToRegister,
             enabled = !isLoading
@@ -192,6 +248,16 @@ fun LoginForm(
     }
 }
 
+/**
+ * Registrierungs-Formular Composable
+ *
+ * Stellt ein Formular für Benutzerregistrierung bereit mit Benutzername, E-Mail und Passwort.
+ * Enthält Passwort-Validierung (mindestens 6 Zeichen) und Sichtbarkeits-Toggle.
+ *
+ * @param onRegister Callback für Registrierungs-Versuch mit allen erforderlichen Daten
+ * @param onSwitchToLogin Callback zum Wechseln zum Login
+ * @param isLoading Zeigt an, ob gerade ein Registrierungs-Versuch läuft
+ */
 @Composable
 fun RegisterForm(
     onRegister: (String, String, String) -> Unit,
@@ -214,6 +280,7 @@ fun RegisterForm(
 
         Spacer(modifier = Modifier.height(24.dp))
 
+        // Benutzername-Eingabefeld
         OutlinedTextField(
             value = username,
             onValueChange = { username = it },
@@ -224,6 +291,7 @@ fun RegisterForm(
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // E-Mail Eingabefeld
         OutlinedTextField(
             value = email,
             onValueChange = { email = it },
@@ -235,6 +303,7 @@ fun RegisterForm(
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // Passwort-Eingabefeld mit Längen-Validierung
         OutlinedTextField(
             value = password,
             onValueChange = { password = it },
@@ -255,6 +324,7 @@ fun RegisterForm(
 
         Spacer(modifier = Modifier.height(24.dp))
 
+        // Registrierungs-Button mit Formular-Validierung
         Button(
             onClick = { onRegister(username, email, password) },
             modifier = Modifier.fillMaxWidth(),
@@ -269,6 +339,7 @@ fun RegisterForm(
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // Link zum Login
         TextButton(
             onClick = onSwitchToLogin,
             enabled = !isLoading

@@ -147,4 +147,97 @@ router.get("/round/:id", async (req, res) => {
   }
 });
 
+// GET /api/game/streetview/check/:locationId - Check if Street View is available for a location
+router.get("/streetview/check/:locationId", async (req, res) => {
+  try {
+    const locationId = parseInt(req.params.locationId);
+
+    if (isNaN(locationId)) {
+      return res.status(400).json({
+        error: "Invalid location ID",
+        message: "Location ID must be a number",
+      });
+    }
+
+    console.log(`🔍 Game Route: Street View check for location ${locationId}`);
+
+    // Get location data from database
+    const locationResult = await database.query(
+      `
+      SELECT id, name, country, coordinates, has_pano, pano_id,
+             ST_Y(coordinates) as lat, ST_X(coordinates) as lng
+      FROM locations 
+      WHERE id = $1
+    `,
+      [locationId]
+    );
+
+    if (locationResult.rows.length === 0) {
+      return res.status(404).json({
+        error: "Location not found",
+        message: `No location found with ID ${locationId}`,
+      });
+    }
+
+    const location = locationResult.rows[0];
+
+    // If we already know the Street View status, return it
+    if (location.has_pano !== null) {
+      console.log(
+        `✅ Cached Street View status for location ${locationId}: ${location.has_pano}`
+      );
+      return res.json({
+        available: location.has_pano,
+        locationId: locationId,
+        lat: parseFloat(location.lat),
+        lng: parseFloat(location.lng),
+        pano_id: location.pano_id || null,
+        name: location.name,
+        country: location.country,
+        cached: true,
+      });
+    }
+
+    // If not cached, validate using Street View Metadata API
+    console.log(
+      `🔍 Validating Street View for location ${locationId} at ${location.lat}, ${location.lng}`
+    );
+    const validation = await gameService.validateStreetViewLocation(
+      parseFloat(location.lat),
+      parseFloat(location.lng)
+    );
+
+    // Update the database with the validation result
+    await database.query(
+      `
+      UPDATE locations 
+      SET has_pano = $1, pano_id = $2, last_checked = NOW()
+      WHERE id = $3
+    `,
+      [validation.available, validation.pano_id || null, locationId]
+    );
+
+    console.log(
+      `✅ Street View validation complete for location ${locationId}: ${validation.available}`
+    );
+
+    res.json({
+      available: validation.available,
+      locationId: locationId,
+      lat: parseFloat(location.lat),
+      lng: parseFloat(location.lng),
+      pano_id: validation.pano_id || null,
+      name: location.name,
+      country: location.country,
+      cached: false,
+    });
+  } catch (error) {
+    console.error("❌ Game Route: Street View check failed:", error.message);
+    res.status(500).json({
+      error: "Failed to check Street View availability",
+      message: "Internal server error",
+    });
+  }
+});
+
 module.exports = router;

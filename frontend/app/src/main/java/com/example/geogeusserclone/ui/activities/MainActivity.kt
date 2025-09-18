@@ -1,3 +1,16 @@
+/**
+ * MainActivity.kt
+ *
+ * Diese Datei enthält die Haupteinstiegs-Activity der GeoGuess-App.
+ * Sie fungiert als Router und entscheidet basierend auf dem Login-Status,
+ * wohin der Benutzer weitergeleitet wird.
+ *
+ * Architektur-Integration:
+ * - Entry Point: Erste Activity, die beim App-Start geladen wird
+ * - Router-Funktion: Leitet basierend auf Authentifizierungsstatus weiter
+ * - Session-Management: Prüft gespeicherte Login-Sessions
+ * - Navigation-Hub: Zentrale Stelle für initiale App-Navigation
+ */
 package com.example.geogeusserclone.ui.activities
 
 import android.content.Intent
@@ -15,17 +28,34 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.example.geogeusserclone.ui.theme.GeoGeusserCloneTheme
+import com.example.geogeusserclone.ui.theme.GeoGuessTheme
 import com.example.geogeusserclone.viewmodels.AuthViewModel
 import dagger.hilt.android.AndroidEntryPoint
 
+/**
+ * Haupt-Entry-Point der Anwendung
+ *
+ * Diese Activity wird beim App-Start geladen und entscheidet basierend auf dem
+ * Authentifizierungsstatus des Benutzers, zu welcher Activity weitergeleitet wird.
+ *
+ * Navigations-Flow:
+ * - Eingeloggt: Direkt zum MenuActivity
+ * - Nicht eingeloggt: Zeigt Welcome-Screen oder leitet zu AuthActivity weiter
+ */
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
+    /**
+     * Initialisiert die Haupt-Activity
+     *
+     * Setzt das Compose-Theme und definiert Navigation-Callbacks für
+     * Authentifizierung und Hauptmenü.
+     */
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            GeoGeusserCloneTheme {
+            GeoGuessTheme {
                 MainScreen(
                     onNavigateToAuth = {
                         startActivity(Intent(this, AuthActivity::class.java))
@@ -41,6 +71,16 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+/**
+ * Haupt-Bildschirm Composable mit Router-Logik
+ *
+ * Entscheidet basierend auf dem Authentifizierungsstatus, welcher Bildschirm
+ * angezeigt werden soll. Führt automatische Navigation durch.
+ *
+ * @param onNavigateToAuth Callback für Navigation zur Authentifizierung
+ * @param onNavigateToMenu Callback für Navigation zum Hauptmenü
+ * @param authViewModel ViewModel für Authentifizierungs-Zustand
+ */
 @Composable
 fun MainScreen(
     onNavigateToAuth: () -> Unit,
@@ -49,14 +89,14 @@ fun MainScreen(
 ) {
     val authState by authViewModel.state.collectAsState()
 
-    // Auto-Navigation basierend auf Login-Status
+    // Automatische Navigation basierend auf Login-Status
     LaunchedEffect(authState.isLoggedIn) {
         if (authState.isLoggedIn) {
             onNavigateToMenu()
         }
     }
 
-    // Wenn noch lädt, zeige Loading
+    // Loading-Zustand während Authentifizierungsprüfung
     if (authState.isLoading) {
         Box(
             modifier = Modifier.fillMaxSize(),
@@ -67,12 +107,20 @@ fun MainScreen(
         return
     }
 
-    // Wenn nicht eingeloggt, zeige Welcome Screen
+    // Welcome-Screen für nicht eingeloggte Benutzer
     if (!authState.isLoggedIn) {
         WelcomeScreen(onGetStarted = onNavigateToAuth)
     }
 }
 
+/**
+ * Welcome-Screen für neue Benutzer
+ *
+ * Zeigt eine einladende Übersicht der App-Features und einen Call-to-Action
+ * Button für den Einstieg in die Authentifizierung.
+ *
+ * @param onGetStarted Callback für den Start der Benutzer-Registrierung/Login
+ */
 @Composable
 private fun WelcomeScreen(
     onGetStarted: () -> Unit
@@ -84,6 +132,7 @@ private fun WelcomeScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
+        // App-Logo
         Text(
             text = "🌍",
             style = MaterialTheme.typography.displayLarge
@@ -91,14 +140,16 @@ private fun WelcomeScreen(
 
         Spacer(modifier = Modifier.height(24.dp))
 
+        // App-Titel
         Text(
-            text = "GeoGuessr Clone",
+            text = "GeoGuess",
             style = MaterialTheme.typography.displayMedium,
             fontWeight = FontWeight.Bold
         )
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // App-Beschreibung
         Text(
             text = "Erkunde die Welt und teste dein geografisches Wissen!",
             style = MaterialTheme.typography.titleMedium,
@@ -107,6 +158,7 @@ private fun WelcomeScreen(
 
         Spacer(modifier = Modifier.height(48.dp))
 
+        // Haupt-Call-to-Action Button
         Button(
             onClick = onGetStarted,
             modifier = Modifier
@@ -123,32 +175,53 @@ private fun WelcomeScreen(
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant
-            )
+        // Feature-Übersicht
+        FeatureOverviewCard()
+    }
+}
+
+/**
+ * Feature-Übersicht Card
+ *
+ * Zeigt die wichtigsten App-Features in einer übersichtlichen Card-Darstellung.
+ * Dient als Marketing-Element für neue Benutzer.
+ */
+@Composable
+private fun FeatureOverviewCard() {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
         ) {
-            Column(
-                modifier = Modifier.padding(16.dp)
-            ) {
-                Text(
-                    text = "✨ Features",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
+            Text(
+                text = "✨ Features",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
 
-                Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-                FeatureItem("🎯", "Einzelspieler Modus")
-                FeatureItem("🗺️", "Interaktive Weltkarte")
-                FeatureItem("📱", "Offline-Modus verfügbar")
-                FeatureItem("📊", "Detaillierte Statistiken")
-            }
+            // Feature-Liste
+            FeatureItem("🎯", "Einzelspieler Modus")
+            FeatureItem("🗺️", "Interaktive Weltkarte")
+            FeatureItem("📱", "Offline-Modus verfügbar")
+            FeatureItem("📊", "Detaillierte Statistiken")
         }
     }
 }
 
+/**
+ * Einzelnes Feature-List-Item
+ *
+ * Stellt ein einzelnes Feature mit Icon und Beschreibung dar.
+ *
+ * @param icon Emoji-Icon für das Feature
+ * @param text Beschreibungstext des Features
+ */
 @Composable
 private fun FeatureItem(
     icon: String,

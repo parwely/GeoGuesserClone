@@ -1,5 +1,5 @@
 <resources>
     <string name="app_name">Speier</string>
     <!-- Google Maps API Key - Replace with your actual key -->
-    <string name="google_maps_key">AIzaSyDPV-VKcOe46KeoGVkIryVP3Uwq6QApV3A</string>
+    <string name="google_maps_key">your-api-key</string>
 </resources>
