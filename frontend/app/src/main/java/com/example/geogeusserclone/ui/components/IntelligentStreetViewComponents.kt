@@ -420,7 +420,16 @@ private fun InteractiveWebViewWithErrorHandling(
                     }
                 }
 
-                loadUrl(url)
+                if (url.contains("/maps/embed/v1/")) {
+                    val html = """
+                        <html><body style=\"margin:0;padding:0;overflow:hidden;\">
+                        <iframe width=\"100%\" height=\"100%\" frameborder=\"0\" style=\"border:0;width:100vw;height:100vh;\" src=\"$url\" allowfullscreen></iframe>
+                        </body></html>
+                    """.trimIndent()
+                    loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
+                } else {
+                    loadUrl(url)
+                }
             }
         },
         modifier = Modifier.fillMaxSize()

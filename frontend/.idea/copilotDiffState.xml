@@ -12,14 +12,6 @@
             </PendingDiffInfo>
           </value>
         </entry>
-        <entry key="$PROJECT_DIR$/app/src/main/java/com/example/geogeusserclone/data/database/entities/GuessEntity.kt">
-          <value>
-            <PendingDiffInfo>
-              <option name="filePath" value="$PROJECT_DIR$/app/src/main/java/com/example/geogeusserclone/data/database/entities/GuessEntity.kt" />
-              <option name="updatedContent" value="package com.example.geogeusserclone.data.database.entities&#10;&#10;import androidx.room.Entity&#10;import androidx.room.ForeignKey&#10;import androidx.room.Index&#10;import androidx.room.PrimaryKey&#10;&#10;@Entity(&#10;    tableName = &quot;guesses&quot;,&#10;    foreignKeys = [&#10;        ForeignKey(&#10;            entity = GameEntity::class,&#10;            parentColumns = [&quot;id&quot;],&#10;            childColumns = [&quot;gameId&quot;],&#10;            onDelete = ForeignKey.CASCADE&#10;        ),&#10;        ForeignKey(&#10;            entity = LocationEntity::class,&#10;            parentColumns = [&quot;id&quot;],&#10;            childColumns = [&quot;locationId&quot;],&#10;            onDelete = ForeignKey.CASCADE&#10;        )&#10;    ],&#10;    indices = [&#10;        Index(value = [&quot;gameId&quot;]),&#10;        Index(value = [&quot;locationId&quot;]),&#10;        Index(value = [&quot;submittedAt&quot;])&#10;    ]&#10;)&#10;data class GuessEntity(&#10;    @PrimaryKey&#10;    val id: String,&#10;    val gameId: String,&#10;    val locationId: String,&#10;    val guessLat: Double,&#10;    val guessLng: Double,&#10;    val actualLat: Double,&#10;    val actualLng: Double,&#10;    val distance: Double,&#10;    val score: Int,&#10;    val timeSpent: Long,&#10;    val submittedAt: Long = System.currentTimeMillis()&#10;)" />
-            </PendingDiffInfo>
-          </value>
-        </entry>
         <entry key="$PROJECT_DIR$/app/src/main/java/com/example/geogeusserclone/data/network/LocationResponse.kt">
           <value>
             <PendingDiffInfo>

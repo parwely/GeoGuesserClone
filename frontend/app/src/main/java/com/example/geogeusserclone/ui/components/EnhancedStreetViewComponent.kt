@@ -198,32 +198,21 @@ private fun InteractiveWebView(
                 settings.apply {
                     javaScriptEnabled = true
                     domStorageEnabled = true
-                        // ENTFERNT: Problematisches JavaScript das neue API-Calls auslösen kann
-                        // view?.evaluateJavascript("""
-                        //     document.addEventListener('click', function() {
-                        //         Android.onTap();
-                        //     });
-                        // """, null)
-
-                        // SICHER: Nur minimale Initialisierung ohne DOM-Manipulation
-                        println("EnhancedStreetViewComponent: ✅ Street View geladen ohne JavaScript-Injection")
+                    println("EnhancedStreetViewComponent: ✅ Street View geladen ohne JavaScript-Injection")
                     allowFileAccess = false
                     allowContentAccess = false
-                    // Security enhancements
                     allowUniversalAccessFromFileURLs = false
                     allowFileAccessFromFileURLs = false
                 }
 
                 webViewClient = object : WebViewClient() {
                     override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
-                        // Nur Google Maps URLs erlauben
                         return !(url?.startsWith("https://www.google.com/maps") == true ||
                                 url?.startsWith("https://maps.googleapis.com") == true)
                     }
 
                     override fun onPageFinished(view: WebView?, url: String?) {
                         super.onPageFinished(view, url)
-                        // Optional: JavaScript injection für erweiterte Funktionalität
                         view?.evaluateJavascript("""
                             document.addEventListener('click', function() {
                                 Android.onTap();
@@ -232,7 +221,16 @@ private fun InteractiveWebView(
                     }
                 }
 
-                loadUrl(streetView.embedUrl)
+                if (streetView.embedUrl.contains("/maps/embed/v1/")) {
+                    val html = """
+                        <html><body style=\"margin:0;padding:0;overflow:hidden;\">
+                        <iframe width=\"100%\" height=\"100%\" frameborder=\"0\" style=\"border:0;width:100vw;height:100vh;\" src=\"${streetView.embedUrl}\" allowfullscreen></iframe>
+                        </body></html>
+                    """.trimIndent()
+                    loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
+                } else {
+                    loadUrl(streetView.embedUrl)
+                }
             }
         },
         modifier = modifier.fillMaxSize()

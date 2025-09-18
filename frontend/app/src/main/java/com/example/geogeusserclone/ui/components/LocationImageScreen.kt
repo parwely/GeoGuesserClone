@@ -813,16 +813,17 @@ private fun OptimizedWebView(
                     domStorageEnabled = true
                     @Suppress("DEPRECATION")
                     databaseEnabled = false
-                    loadsImagesAutomatically = false
-                    blockNetworkImage = true
+                    // KORRIGIERT: Bilder MÜSSEN geladen werden für Street View
+                    loadsImagesAutomatically = true
+                    blockNetworkImage = false
                     blockNetworkLoads = false
                     loadWithOverviewMode = true
                     useWideViewPort = true
-                    setSupportZoom(false)
+                    setSupportZoom(true)
                     builtInZoomControls = false
                     displayZoomControls = false
-                    mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
-                    mediaPlaybackRequiresUserGesture = true
+                    mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+                    mediaPlaybackRequiresUserGesture = false
                     allowFileAccess = false
                     allowContentAccess = false
                     @Suppress("DEPRECATION")
@@ -831,8 +832,14 @@ private fun OptimizedWebView(
                     allowFileAccessFromFileURLs = false
                     setGeolocationEnabled(false)
                     setSupportMultipleWindows(false)
-                    cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
-                    userAgentString = "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0 Mobile Safari/537.36"
+                    cacheMode = WebSettings.LOAD_DEFAULT
+                    // KRITISCH: Korrekter User Agent für Google Maps
+                    userAgentString = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36"
+
+                    // NEUE: Zusätzliche Einstellungen für Google Maps
+                    setRenderPriority(WebSettings.RenderPriority.HIGH)
+                    setAppCacheEnabled(true)
+                    setAppCachePath(context.cacheDir.absolutePath)
                 }
                 webViewClient = object : WebViewClient() {
                     private var errorCount = 0
@@ -984,51 +991,76 @@ private fun OptimizedWebView(
                     }
                 }
                 try {
-                    val headers = mapOf(
-                        "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                        "Accept-Language" to "de-DE,de;q=0.9,en;q=0.8",
-                        "Cache-Control" to "max-age=300",
-                        "Connection" to "keep-alive"
-                    )
-                    loadUrl(url, headers)
+                    if (url.contains("/maps/embed/v1/")) {
+                        // KORRIGIERT: Verbessertes HTML mit korrekten Meta-Tags und Viewport
+                        val html = """
+                            <!DOCTYPE html>
+                            <html lang="de">
+                            <head>
+                                <meta charset="UTF-8">
+                                <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+                                <meta http-equiv="X-UA-Compatible" content="IE=edge">
+                                <title>Street View</title>
+                                <style>
+                                    * { margin: 0; padding: 0; box-sizing: border-box; }
+                                    html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
+                                    #streetview-frame { 
+                                        width: 100vw; 
+                                        height: 100vh; 
+                                        border: none; 
+                                        display: block;
+                                        background: #f0f0f0;
+                                    }
+                                    .loading {
+                                        position: absolute;
+                                        top: 50%;
+                                        left: 50%;
+                                        transform: translate(-50%, -50%);
+                                        color: #666;
+                                        font-family: Arial, sans-serif;
+                                        z-index: 1;
+                                    }
+                                </style>
+                            </head>
+                            <body>
+                                <div class="loading" id="loading">Lade Street View...</div>
+                                <iframe 
+                                    id="streetview-frame"
+                                    src="$url" 
+                                    width="100%" 
+                                    height="100%" 
+                                    frameborder="0" 
+                                    allowfullscreen
+                                    loading="eager"
+                                    referrerpolicy="no-referrer-when-downgrade">
+                                </iframe>
+                                <script>
+                                    document.getElementById('streetview-frame').onload = function() {
+                                        document.getElementById('loading').style.display = 'none';
+                                        console.log('Street View iframe geladen');
+                                    };
+                                    // Timeout als Fallback
+                                    setTimeout(function() {
+                                        document.getElementById('loading').style.display = 'none';
+                                    }, 8000);
+                                </script>
+                            </body>
+                            </html>
+                        """.trimIndent()
+
+                        // KRITISCH: loadDataWithBaseURL mit korrekter Base URL für Google Maps
+                        loadDataWithBaseURL("https://www.google.com/", html, "text/html", "UTF-8", null)
+
+                        println("LocationImageScreen: 🌐 HTML mit verbesserter Struktur geladen")
+                    } else {
+                        val headers = mapOf(
+                            "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                            "Accept-Language" to "de-DE,de;q=0.9,en;q=0.8",
+                            "Cache-Control" to "max-age=300",
+                            "Connection" to "keep-alive"
+                        )
+                        loadUrl(url, headers)
+                    }
                 } catch (e: Exception) {
                     onError("URL-Ladefehler: ${e.message}")
                 }
-            }
-        },
-        modifier = modifier,
-        update = { webView ->
-            if (!isWebViewReady && loadingProgress < 100) {
-                // WebView ist noch am Laden - keine Updates
-            }
-        }
-    )
-    // NEUE: Loading Overlay nur bei langsamen Verbindungen
-    if (loadingProgress < 100 && loadingProgress > 0) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f)
-                )
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    CircularProgressIndicator(
-                        progress = { loadingProgress / 100f },
-                        modifier = Modifier.size(32.dp)
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Lade Street View... $loadingProgress%",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-            }
-        }
-    }
-}
