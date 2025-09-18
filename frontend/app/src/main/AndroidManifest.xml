@@ -39,6 +39,11 @@
         android:largeHeap="true"
         android:requestLegacyExternalStorage="true">
 
+        <!-- Google Maps API Key -->
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="@string/google_maps_key" />
+
         <!-- KRITISCH: WebView-Provider Konfiguration für Performance -->
         <meta-data
             android:name="android.webkit.WebView.MetricsOptOut"

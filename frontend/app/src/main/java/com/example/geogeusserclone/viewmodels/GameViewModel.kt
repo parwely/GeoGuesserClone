@@ -1,14 +1,16 @@
-package com.example.geogeusserclone.ui.viewmodels
+package com.example.geogeusserclone.viewmodels
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.geogeusserclone.data.models.*
 import com.example.geogeusserclone.data.repositories.GameRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 @HiltViewModel
@@ -27,29 +29,37 @@ class GameViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
 
             try {
-                val result = gameRepository.startNewRound(difficulty, category)
+                // PERFORMANCE: Verwende Dispatchers.IO für Backend-Calls
+                val result = withContext(Dispatchers.IO) {
+                    gameRepository.startNewRound(difficulty, category)
+                }
 
                 result.fold(
                     onSuccess = { newRoundResponse ->
-                        _gameState.value = _gameState.value.copy(
-                            currentRound = GameRound(
-                                roundId = newRoundResponse.roundId,
-                                location = newRoundResponse.location,
-                                guess = null,
-                                score = 0,
-                                distanceMeters = 0.0,
-                                isCompleted = false
-                            ),
-                            isRoundActive = true
-                        )
-                        _uiState.value = _uiState.value.copy(
-                            isLoading = false,
-                            streetViewReady = false,
-                            showGuessMap = false
-                        )
+                        // PERFORMANCE: UI-Updates auf Main Thread
+                        withContext(Dispatchers.Main) {
+                            _gameState.value = _gameState.value.copy(
+                                currentRound = GameRound(
+                                    roundId = newRoundResponse.roundId,
+                                    location = newRoundResponse.location,
+                                    guess = null,
+                                    score = 0,
+                                    distanceMeters = 0.0,
+                                    isCompleted = false
+                                ),
+                                isRoundActive = true
+                            )
+                            _uiState.value = _uiState.value.copy(
+                                isLoading = false,
+                                streetViewReady = false,
+                                showGuessMap = false
+                            )
+                        }
 
-                        // Check Street View availability
-                        checkStreetViewAvailability(newRoundResponse.location.id)
+                        // PERFORMANCE: Street View Check asynchron starten
+                        launch(Dispatchers.IO) {
+                            checkStreetViewAvailability(newRoundResponse.location.id)
+                        }
                     },
                     onFailure = { error ->
                         _uiState.value = _uiState.value.copy(
@@ -81,29 +91,35 @@ class GameViewModel @Inject constructor(
                     timeSpentSeconds = timeSpentSeconds
                 )
 
-                val result = gameRepository.submitGuess(guessRequest)
+                // PERFORMANCE: Verwende Dispatchers.IO für Backend-Calls
+                val result = withContext(Dispatchers.IO) {
+                    gameRepository.submitGuess(guessRequest)
+                }
 
                 result.fold(
                     onSuccess = { scoreResponse ->
-                        val updatedRound = currentRound.copy(
-                            guess = GuessLocation(guessLat, guessLng, timeSpentSeconds),
-                            score = scoreResponse.score,
-                            distanceMeters = scoreResponse.distanceMeters,
-                            isCompleted = true
-                        )
+                        // PERFORMANCE: UI-Updates auf Main Thread
+                        withContext(Dispatchers.Main) {
+                            val updatedRound = currentRound.copy(
+                                guess = GuessLocation(guessLat, guessLng, timeSpentSeconds),
+                                score = scoreResponse.score,
+                                distanceMeters = scoreResponse.distanceMeters,
+                                isCompleted = true
+                            )
 
-                        _gameState.value = _gameState.value.copy(
-                            currentRound = updatedRound,
-                            totalScore = _gameState.value.totalScore + scoreResponse.score,
-                            completedRounds = _gameState.value.completedRounds + updatedRound,
-                            isRoundActive = false
-                        )
+                            _gameState.value = _gameState.value.copy(
+                                currentRound = updatedRound,
+                                totalScore = _gameState.value.totalScore + scoreResponse.score,
+                                completedRounds = _gameState.value.completedRounds + updatedRound,
+                                isRoundActive = false
+                            )
 
-                        _uiState.value = _uiState.value.copy(
-                            isSubmittingGuess = false,
-                            showResults = true,
-                            lastScoreResponse = scoreResponse
-                        )
+                            _uiState.value = _uiState.value.copy(
+                                isSubmittingGuess = false,
+                                showResults = true,
+                                lastScoreResponse = scoreResponse
+                            )
+                        }
                     },
                     onFailure = { error ->
                         _uiState.value = _uiState.value.copy(
@@ -122,30 +138,37 @@ class GameViewModel @Inject constructor(
     }
 
     private fun checkStreetViewAvailability(locationId: Int) {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) { // PERFORMANCE: Explizit IO-Thread verwenden
             try {
                 val result = gameRepository.checkStreetViewAvailability(locationId)
                 result.fold(
                     onSuccess = { isAvailable ->
-                        _uiState.value = _uiState.value.copy(
-                            streetViewAvailable = isAvailable,
-                            streetViewReady = isAvailable
-                        )
+                        // PERFORMANCE: UI-Update auf Main Thread
+                        withContext(Dispatchers.Main) {
+                            _uiState.value = _uiState.value.copy(
+                                streetViewAvailable = isAvailable,
+                                streetViewReady = isAvailable
+                            )
+                        }
                     },
                     onFailure = {
-                        // Assume available if check fails
-                        _uiState.value = _uiState.value.copy(
-                            streetViewAvailable = true,
-                            streetViewReady = true
-                        )
+                        // PERFORMANCE: UI-Update auf Main Thread - Assume available if check fails
+                        withContext(Dispatchers.Main) {
+                            _uiState.value = _uiState.value.copy(
+                                streetViewAvailable = true,
+                                streetViewReady = true
+                            )
+                        }
                     }
                 )
             } catch (e: Exception) {
-                // Assume available if check fails
-                _uiState.value = _uiState.value.copy(
-                    streetViewAvailable = true,
-                    streetViewReady = true
-                )
+                // PERFORMANCE: UI-Update auf Main Thread - Assume available if check fails
+                withContext(Dispatchers.Main) {
+                    _uiState.value = _uiState.value.copy(
+                        streetViewAvailable = true,
+                        streetViewReady = true
+                    )
+                }
             }
         }
     }
@@ -179,22 +202,3 @@ class GameViewModel @Inject constructor(
         _uiState.value = GameUiState()
     }
 }
-
-data class GameState(
-    val currentRound: GameRound? = null,
-    val completedRounds: List<GameRound> = emptyList(),
-    val totalScore: Int = 0,
-    val isRoundActive: Boolean = false,
-    val gameSession: GameSession? = null
-)
-
-data class GameUiState(
-    val isLoading: Boolean = false,
-    val isSubmittingGuess: Boolean = false,
-    val streetViewReady: Boolean = false,
-    val streetViewAvailable: Boolean = true,
-    val showGuessMap: Boolean = false,
-    val showResults: Boolean = false,
-    val error: String? = null,
-    val lastScoreResponse: ScoreResponse? = null
-)

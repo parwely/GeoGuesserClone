@@ -141,6 +141,10 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview:1.5.0")
     implementation("androidx.compose.material3:material3:1.2.0")
 
+    // Google Maps SDK for Street View
+    implementation("com.google.android.gms:play-services-maps:18.2.0")
+    implementation("com.google.android.gms:play-services-location:21.0.1")
+
     // Hilt
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)

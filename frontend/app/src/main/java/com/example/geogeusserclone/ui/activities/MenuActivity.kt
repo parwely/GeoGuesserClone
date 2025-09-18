@@ -175,29 +175,6 @@ fun MenuScreen(
                 }
             }
 
-            // Multiplayer Button
-            item {
-                Button(
-                    onClick = {
-                        // Starte Multiplayer-Lobby
-                        context.startActivity(Intent(context, SessionLobbyActivity::class.java))
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(60.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.secondary
-                    )
-                ) {
-                    Icon(Icons.Default.Person, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        "Multiplayer / Battle Royale",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                }
-            }
-
             // Game Mode Cards
             item {
                 Text(

@@ -303,7 +303,7 @@ router.get("/:id/streetview/diagnose", async (req, res) => {
       },
       fov: {
         value: fov,
-        valid: fov >= 10 && fov <= 120,
+        valid: fov >= 10 && fov <= 100,
         type: typeof fov,
       },
     };
@@ -352,7 +352,7 @@ router.get("/:id/streetview/diagnose", async (req, res) => {
       diagnostics.recommendations.push({
         priority: "MEDIUM",
         issue: "Invalid FOV parameter",
-        solution: `FOV should be 10-120, got: ${fov}`,
+        solution: `FOV should be 10-100, got: ${fov}`,
       });
     }
 

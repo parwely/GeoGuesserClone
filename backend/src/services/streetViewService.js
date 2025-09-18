@@ -34,17 +34,18 @@ class StreetViewService {
     const safePitch = this.sanitizePitch(pitch);
     const safeFov = this.sanitizeFov(fov);
 
+    // Google Maps Embed API für Street View unterstützt nur diese Parameter:
+    // - key (required)
+    // - location (required)
+    // - heading (optional, 0-360)
+    // - pitch (optional, -90 to 90)
+    // - fov (optional, 10-100)
     const params = new URLSearchParams({
       key: this.apiKey,
       location: `${lat},${lng}`,
       heading: safeHeading.toString(),
       pitch: safePitch.toString(),
       fov: safeFov.toString(),
-      // Wichtig: Diese Parameter ermöglichen Navigation
-      navigation: "1", // Ermöglicht Bewegung zwischen Street View-Punkten
-      controls: "1", // Zeigt Navigationskontrollen
-      zoom: "1", // Ermöglicht Zoom
-      fullscreen: "1", // Vollbild-Option
     });
 
     return `${this.embedUrl}?${params.toString()}`;
@@ -92,7 +93,7 @@ class StreetViewService {
     }
     const numFov = typeof fov === "string" ? parseFloat(fov) : fov;
     if (isNaN(numFov)) return 90;
-    return Math.max(10, Math.min(120, numFov)); // Clamp zwischen 10 und 120
+    return Math.max(10, Math.min(100, numFov)); // Clamp zwischen 10 und 100 (Google Maps Embed API Limit)
   }
 
   /**

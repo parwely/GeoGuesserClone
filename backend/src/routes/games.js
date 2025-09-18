@@ -1,134 +1,148 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const { authenticateToken } = require('../middleware/authMiddleware');
-const locationService = require('../services/locationService');
-const database = require('../database/connection');
+const gameService = require("../services/gameService");
+const database = require("../database/connection");
 
-// Create single player game
-router.post('/single', authenticateToken, async (req, res) => {
+// GET /api/game/newRound - Start a new game round
+router.get("/newRound", async (req, res) => {
   try {
-    const { difficulty, category, rounds = 5 } = req.body;
-    const userId = req.user.id;
-    
-    // Get random locations for the game
-    const locations = await locationService.getRandomLocations({
-      count: rounds,
-      difficulty,
-      category
-    });
-    
-    if (locations.length < rounds) {
-      return res.status(400).json({
-        error: 'Not enough locations available',
-        message: `Only ${locations.length} locations found, need ${rounds}`
+    console.log("🎮 Game Route: /newRound called");
+
+    const userId = req.query.userId || req.user?.id || null;
+
+    // Get a random location that has Street View coverage
+    const location = await gameService.getRandomGameLocation();
+
+    if (!location) {
+      return res.status(404).json({
+        error: "No locations available",
+        message: "No Street View locations found for game",
       });
     }
-    
-    // Create game session
-    const result = await database.query(`
-      INSERT INTO game_sessions (session_type, created_by, status, settings, location_ids, max_players)
-      VALUES ('single', $1, 'active', $2, $3, 1)
-      RETURNING id, created_at
-    `, [
-      userId,
-      JSON.stringify({ difficulty, category, rounds }),
-      locations.map(loc => loc.id)
-    ]);
-    
-    const gameSession = result.rows[0];
-    
+
+    // Create a new round record
+    const round = await gameService.createRound(location.id, userId);
+
+    console.log(
+      `✅ New round created: ${round.id} for location: ${location.name}`
+    );
+
     res.json({
-      success: true,
-      data: {
-        gameId: gameSession.id,
-        locations: locations,
-        settings: { difficulty, category, rounds },
-        createdAt: gameSession.created_at
-      }
+      id: round.id,
+      lat: location.coordinates.latitude,
+      lng: location.coordinates.longitude,
+      pano_id: location.pano_id || undefined,
+      location_hint: location.country, // Optional hint without giving away the answer
     });
-    
   } catch (error) {
-    console.error('❌ Create single game failed:', error.message);
+    console.error("❌ Game Route: /newRound failed:", error.message);
     res.status(500).json({
-      error: 'Failed to create game',
-      message: 'Internal server error'
+      error: "Failed to create new round",
+      message: "Internal server error",
     });
   }
 });
 
-// Submit game result
-router.put('/:id/result', authenticateToken, async (req, res) => {
+// POST /api/game/guess - Submit a guess for a round
+router.post("/guess", async (req, res) => {
   try {
-    const gameId = parseInt(req.params.id);
-    const userId = req.user.id;
-    const { totalScore, totalDistance, accuracy, roundsData, timeTaken } = req.body;
-    
-    if (!roundsData || !Array.isArray(roundsData)) {
+    console.log("🎯 Game Route: /guess called");
+
+    const { roundId, guessLat, guessLng, userId } = req.body;
+
+    // Validate required parameters
+    if (!roundId || guessLat === undefined || guessLng === undefined) {
       return res.status(400).json({
-        error: 'Invalid game result data',
-        message: 'roundsData must be an array'
+        error: "Invalid guess data",
+        message: "roundId, guessLat, and guessLng are required",
       });
     }
-    
-    // Verify game belongs to user
-    const gameCheck = await database.query(`
-      SELECT id FROM game_sessions 
-      WHERE id = $1 AND created_by = $2
-    `, [gameId, userId]);
-    
-    if (gameCheck.rows.length === 0) {
+
+    // Validate coordinate ranges
+    if (guessLat < -90 || guessLat > 90 || guessLng < -180 || guessLng > 180) {
+      return res.status(400).json({
+        error: "Invalid coordinates",
+        message: "Latitude must be -90 to 90, longitude must be -180 to 180",
+      });
+    }
+
+    // Process the guess
+    const result = await gameService.processGuess({
+      roundId: parseInt(roundId),
+      guessLat: parseFloat(guessLat),
+      guessLng: parseFloat(guessLng),
+      userId: userId || req.user?.id || null,
+    });
+
+    console.log(
+      `✅ Guess processed for round ${roundId}: ${result.distanceMeters}m = ${result.score} points`
+    );
+
+    res.json({
+      distanceMeters: result.distanceMeters,
+      score: result.score,
+      actual: {
+        lat: result.actualLocation.latitude,
+        lng: result.actualLocation.longitude,
+        name: result.actualLocation.name,
+        country: result.actualLocation.country,
+      },
+      maxPossibleScore: result.maxPossibleScore,
+    });
+  } catch (error) {
+    console.error("❌ Game Route: /guess failed:", error.message);
+
+    if (error.message === "Round not found") {
       return res.status(404).json({
-        error: 'Game not found',
-        message: 'Game does not exist or does not belong to user'
+        error: "Round not found",
+        message: `No round found with ID ${req.body.roundId}`,
       });
     }
-    
-    // Insert game result
-    const result = await database.query(`
-      INSERT INTO game_results (session_id, user_id, total_score, total_distance, accuracy, rounds_completed, time_taken, rounds_data)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-      RETURNING id, created_at
-    `, [
-      gameId,
-      userId,
-      totalScore,
-      totalDistance,
-      accuracy,
-      roundsData.length,
-      timeTaken,
-      JSON.stringify(roundsData)
-    ]);
-    
-    // Update game session as finished
-    await database.query(`
-      UPDATE game_sessions 
-      SET status = 'finished', finished_at = NOW()
-      WHERE id = $1
-    `, [gameId]);
-    
-    // Update user stats
-    await database.query(`
-      UPDATE users 
-      SET total_score = total_score + $1, 
-          games_played = games_played + 1
-      WHERE id = $2
-    `, [totalScore, userId]);
-    
+
+    if (error.message === "Round already completed") {
+      return res.status(400).json({
+        error: "Round already completed",
+        message: "This round has already been guessed",
+      });
+    }
+
+    res.status(500).json({
+      error: "Failed to process guess",
+      message: "Internal server error",
+    });
+  }
+});
+
+// GET /api/game/round/:id - Get round details
+router.get("/round/:id", async (req, res) => {
+  try {
+    const roundId = parseInt(req.params.id);
+
+    if (isNaN(roundId)) {
+      return res.status(400).json({
+        error: "Invalid round ID",
+        message: "Round ID must be a number",
+      });
+    }
+
+    const round = await gameService.getRoundById(roundId);
+
+    if (!round) {
+      return res.status(404).json({
+        error: "Round not found",
+        message: `No round found with ID ${roundId}`,
+      });
+    }
+
     res.json({
       success: true,
-      data: {
-        resultId: result.rows[0].id,
-        gameId: gameId,
-        totalScore,
-        submittedAt: result.rows[0].created_at
-      }
+      data: round,
     });
-    
   } catch (error) {
-    console.error('❌ Submit game result failed:', error.message);
+    console.error("❌ Game Route: /round/:id failed:", error.message);
     res.status(500).json({
-      error: 'Failed to submit game result',
-      message: 'Internal server error'
+      error: "Failed to get round",
+      message: "Internal server error",
     });
   }
 });

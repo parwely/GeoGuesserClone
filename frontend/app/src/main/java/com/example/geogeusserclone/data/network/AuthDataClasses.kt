@@ -223,11 +223,7 @@ data class HealthResponse(
 )
 
 // Zusätzliche Response-Klassen für API-Endpunkte
-@Serializable
-data class StreetViewAvailabilityResponse(
-    val success: Boolean,
-    val streetViewAvailable: Boolean
-)
+// StreetViewAvailabilityResponse wurde nach GameApi.kt verschoben
 
 @Serializable
 data class LocationDistanceResponse(

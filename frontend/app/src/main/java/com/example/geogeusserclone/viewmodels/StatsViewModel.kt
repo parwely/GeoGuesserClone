@@ -39,16 +39,24 @@ class StatsViewModel @Inject constructor(
             try {
                 val currentUser = userRepository.getCurrentUser()
                 if (currentUser != null) {
-                    // Lade Spiele-Statistiken
-                    gameRepository.getGameHistory(currentUser.id).collect { games: List<GameEntity> ->
-                        val gameStats = calculateGameStats(games)
-                        _uiState.update {
-                            it.copy(
-                                gameStats = gameStats,
-                                isLoading = false,
-                                error = null
-                            )
-                        }
+                    // Lade Spiele-Statistiken - temporär deaktiviert für neue Game API
+                    // gameRepository.getGameHistory(currentUser.id).collect { games: List<GameEntity> ->
+                    //     val gameStats = calculateGameStats(games)
+                    //     _uiState.update {
+                    //         it.copy(
+                    //             gameStats = gameStats,
+                    //             isLoading = false,
+                    //             error = null
+                    //         )
+                    //     }
+                    // }
+
+                    // Temporäre Fallback-Statistiken bis getGameHistory implementiert ist
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            error = null
+                        )
                     }
                 } else {
                     _uiState.update {

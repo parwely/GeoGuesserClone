@@ -32,7 +32,7 @@ import coil.compose.AsyncImage
 import coil.request.CachePolicy
 import coil.request.ImageRequest
 import com.example.geogeusserclone.data.database.entities.LocationEntity
-import com.example.geogeusserclone.utils.MemoryManager
+import com.example.geogeusserclone.BuildConfig
 import java.net.URLDecoder
 import java.util.Locale
 
@@ -46,33 +46,27 @@ fun LocationImageScreen(
 ) {
     val context = LocalContext.current
 
-    // KORRIGIERT: AutoMemoryManagement direkt im Composable-Body aufrufen
-    MemoryManager.AutoMemoryManagement(context)
-
-    // NEUE: State für Fallback-Handling
+    // State für Fallback-Handling
     var shouldUseFallbackImage by remember { mutableStateOf(false) }
     var fallbackImageUrl by remember { mutableStateOf<String?>(null) }
     var webViewError by remember { mutableStateOf<String?>(null) }
 
-    // KORRIGIERT: Stabiler State mit remember key
+    // VEREINFACHT: Da Backend jetzt saubere URLs liefert, nur minimale Validierung
     val cleanedUrl = remember(location.id, location.imageUrl) {
-        val result = cleanAndValidateStreetViewUrl(location.imageUrl)
-        // REDUZIERT: Nur einmal beim ersten Laden loggen
+        val result = validateCleanUrl(location.imageUrl)
         if (result.isNotBlank()) {
-            println("LocationImageScreen: 🔍 URL bereinigt für ${location.city}: ${result.take(80)}...")
+            println("LocationImageScreen: ✅ Clean URL from backend: ${result.take(80)}...")
         }
         result
     }
 
-    // NEUE: Intelligente Fallback-Erkennung BEVOR WebView geladen wird
+    // VEREINFACHT: Direkte Verwendung der Backend-URLs ohne komplexe Bereinigung
     val shouldUseWebView = remember(cleanedUrl) {
         cleanedUrl.contains("google.com/maps/embed/v1/streetview") &&
-        !cleanedUrl.contains("[object Object]") &&
-        hasValidLocationParameter(cleanedUrl) &&
         !shouldUseFallbackImage
     }
 
-    // NEUE: Verhindere wiederholte Fallback-Generierung
+    // Fallback-Generierung nur bei Bedarf
     val stableFallbackUrl = remember(location.id, shouldUseFallbackImage) {
         if (shouldUseFallbackImage) {
             generateLocationFallbackUrl(location).also {
@@ -87,7 +81,7 @@ fun LocationImageScreen(
         modifier = Modifier.fillMaxSize()
     ) {
         when {
-            // NEUE: Verwende stabilen Fallback-State
+            // Fallback-Image verwenden
             shouldUseFallbackImage && stableFallbackUrl != null -> {
                 FallbackImageView(
                     imageUrl = stableFallbackUrl,
@@ -96,15 +90,13 @@ fun LocationImageScreen(
                 )
             }
 
-            // KORRIGIERT: Nur WebView verwenden wenn wirklich nötig
+            // Interactive Street View (Google Maps Embed)
             shouldUseWebView -> {
-                // REDUZIERT: Nur einmal loggen bei Initialisierung
                 LaunchedEffect(location.id) {
-                    println("LocationImageScreen: 🎮 Initialisiere Interactive Street View für ${location.city}")
+                    println("LocationImageScreen: 🎮 Lade Clean Interactive Street View für ${location.city}")
                 }
 
-                // NEUE: Performance-optimierte WebView mit Crash-Prevention
-                OptimizedWebView(
+                CleanWebView(
                     url = cleanedUrl,
                     locationName = location.city ?: "Unbekannt",
                     onError = { errorMessage ->
@@ -117,9 +109,7 @@ fun LocationImageScreen(
             }
 
             // Static Street View (Google API)
-            cleanedUrl.startsWith("https://maps.googleapis.com/maps/api/streetview") &&
-                    !cleanedUrl.contains("[object Object]") &&
-                    !cleanedUrl.contains("PLACEHOLDER_API_KEY") -> {
+            cleanedUrl.startsWith("https://maps.googleapis.com/maps/api/streetview") -> {
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
                         .data(cleanedUrl)
@@ -136,8 +126,7 @@ fun LocationImageScreen(
             }
 
             // Fallback Images (Unsplash etc.)
-            cleanedUrl.contains("unsplash.com") ||
-                    cleanedUrl.contains("images.") -> {
+            cleanedUrl.contains("unsplash.com") || cleanedUrl.contains("images.") -> {
                 FallbackImageView(
                     imageUrl = cleanedUrl,
                     locationName = location.city ?: "Unbekannt",
@@ -145,22 +134,11 @@ fun LocationImageScreen(
                 )
             }
 
-            // Empty or corrupted URLs
+            // Empty URLs
             cleanedUrl.isBlank() -> {
                 EmptyLocationView(
                     locationName = location.city ?: "Unbekannt",
                     country = location.country,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-
-            // Corrupted URLs with [object Object]
-            cleanedUrl.contains("[object Object]") ||
-                    cleanedUrl.contains("PLACEHOLDER_API_KEY") -> {
-                val fallbackUrl = generateRegionalFallbackUrl(location)
-                FallbackImageView(
-                    imageUrl = fallbackUrl,
-                    locationName = location.city ?: "Unbekannt",
                     modifier = Modifier.fillMaxSize()
                 )
             }
@@ -175,7 +153,7 @@ fun LocationImageScreen(
             }
         }
 
-        // UI Overlay-Komponenten bleiben unverändert
+        // UI Overlay-Komponenten
         TimeRemainingCard(
             timeRemaining = timeRemaining,
             modifier = Modifier.align(Alignment.TopEnd)
@@ -196,7 +174,7 @@ fun LocationImageScreen(
             modifier = Modifier.align(Alignment.BottomEnd)
         )
 
-        // NEUE: Error Overlay bei WebView-Problemen
+        // Error Overlay bei WebView-Problemen
         webViewError?.let { error ->
             Card(
                 modifier = Modifier
@@ -650,72 +628,64 @@ private fun generateRegionalFallbackUrl(location: LocationEntity): String {
             "https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=800&h=600&fit=crop"
     }
 }
+
 // NEUE: URL-Bereinigungsfunktion - KRITISCHE KORREKTUR für "Missing location parameter"
 private fun cleanAndValidateStreetViewUrl(originalUrl: String): String {
     try {
-        println("LocationImageScreen: 🧹 Bereinige URL: ${originalUrl.take(100)}...")
+        println("LocationImageScreen: 🧹 ORIGINAL URL: $originalUrl")
 
-        // 1. Entferne nur offensichtlich korrupte Daten
+        // KRITISCH: Minimale Bereinigung - nur offensichtlich korrupte Daten entfernen
         var cleanUrl = originalUrl
             .replace("[object Object]", "")
             .replace("undefined", "")
             .trim()
 
-        // 2. Prüfe ob es eine Google Maps URL ist
+        println("LocationImageScreen: 🧹 NACH GRUNDBEREINIGUNG: $cleanUrl")
+
+        // KRITISCH: Für Google Maps URLs - KEINE weiteren Änderungen!
         if (cleanUrl.contains("google.com/maps/embed/v1/streetview")) {
-            // KRITISCH: Entferne unsupported Parameter die HTTP 400 verursachen
-            cleanUrl = removeUnsupportedEmbedParameters(cleanUrl)
+            // NEUE: Prüfe location Parameter BEVOR weitere Verarbeitung
+            val hasLocationBefore = checkLocationParameter(cleanUrl)
+            println("LocationImageScreen: 🔍 Location Parameter vor Verarbeitung: $hasLocationBefore")
 
-            // KRITISCH: Robuste location Parameter-Erkennung
-            val hasLocation = when {
-                // Suche nach location= gefolgt von Koordinaten (URL-kodiert oder nicht)
-                Regex("location=([0-9.-]+[%2C,][0-9.-]+)").containsMatchIn(cleanUrl) -> {
-                    println("LocationImageScreen: ✅ Location Parameter mit Koordinaten gefunden")
-                    true
-                }
-                // Prüfe auf location= gefolgt von nicht-leeren Werten
-                cleanUrl.contains("location=") &&
-                !cleanUrl.contains("location=&") &&
-                !cleanUrl.contains("location=$") &&
-                !cleanUrl.contains("location=,") &&
-                !cleanUrl.contains("location=%2C") -> {
-                    println("LocationImageScreen: ✅ Location Parameter gefunden (Format unbekannt)")
-                    true
-                }
-                else -> {
-                    println("LocationImageScreen: ❌ Kein gültiger location Parameter gefunden")
-                    false
-                }
-            }
+            if (hasLocationBefore) {
+                // NUR URL-Dekodierung, KEINE Parameter-Entfernung
+                val decodedUrl = simpleUrlDecode(cleanUrl)
+                println("LocationImageScreen: 🔄 DEKODIERTE URL: $decodedUrl")
 
-            if (hasLocation) {
-                println("LocationImageScreen: ✅ Google Maps Embed URL ist gültig und bereinigt")
-                return cleanUrl
+                val hasLocationAfter = checkLocationParameter(decodedUrl)
+                println("LocationImageScreen: 🔍 Location Parameter nach Dekodierung: $hasLocationAfter")
+
+                if (hasLocationAfter) {
+                    println("LocationImageScreen: ✅ URL ist gültig und bereinigt")
+                    return decodedUrl
+                } else {
+                    println("LocationImageScreen: ❌ Location Parameter verloren bei Dekodierung!")
+                    return cleanUrl // Verwende Original wenn Dekodierung Parameter zerstört
+                }
             } else {
-                println("LocationImageScreen: 🔧 Fehlender location Parameter, verwende Fallback")
+                println("LocationImageScreen: ❌ Kein location Parameter in Google Maps URL gefunden")
                 return "" // Triggert Fallback
             }
         }
 
-        // 3. Für statische Street View URLs
+        // Für statische Street View URLs
         if (cleanUrl.startsWith("https://maps.googleapis.com/maps/api/streetview")) {
-            val hasLocation = Regex("location=([0-9.-]+[,][0-9.-]+)").containsMatchIn(cleanUrl) ||
-                             (cleanUrl.contains("location=") &&
-                              !cleanUrl.contains("location=&") &&
-                              !cleanUrl.contains("location=$"))
+            val hasLocation = checkLocationParameter(cleanUrl)
+            println("LocationImageScreen: 🔍 Statische URL Location Parameter: $hasLocation")
 
             if (hasLocation) {
-                println("LocationImageScreen: ✅ Statische Street View URL mit location Parameter")
+                println("LocationImageScreen: ✅ Statische Street View URL ist gültig")
                 return cleanUrl
             } else {
-                println("LocationImageScreen: ❌ Statische URL ohne gültigen location Parameter")
+                println("LocationImageScreen: ❌ Statische URL ohne location Parameter")
                 return ""
             }
         }
 
-        // 4. Andere URLs (Unsplash etc.) - unverändert durchlassen
+        // Andere URLs (Unsplash etc.) - unverändert durchlassen
         if (!cleanUrl.contains("[object Object]") && !cleanUrl.contains("undefined") && cleanUrl.isNotBlank()) {
-            println("LocationImageScreen: ✅ Andere URL akzeptiert: ${cleanUrl.take(50)}...")
+            println("LocationImageScreen: ✅ Andere URL akzeptiert: ${cleanUrl.take(100)}")
             return cleanUrl
         }
 
@@ -723,76 +693,68 @@ private fun cleanAndValidateStreetViewUrl(originalUrl: String): String {
         return ""
 
     } catch (e: Exception) {
-        println("LocationImageScreen: ❌ Fehler bei URL-Bereinigung: ${e.message}")
+        println("LocationImageScreen: ❌ KRITISCHER FEHLER bei URL-Bereinigung: ${e.message}")
+        println("LocationImageScreen: 🔧 Stack trace: ${e.stackTrace.take(3).joinToString()}")
         return ""
     }
 }
 
-// NEUE: Entferne Google Maps Embed Parameter die nicht unterstützt werden
-private fun removeUnsupportedEmbedParameters(url: String): String {
-    var cleanedUrl = url
+// NEUE: Einfache URL-Dekodierung ohne Parameter-Verlust
+private fun simpleUrlDecode(url: String): String {
+    return try {
+        // NUR die wichtigsten Dekodierungen - sehr konservativ
+        val decoded = url
+            .replace("%2C", ",")  // Komma - KRITISCH für location Parameter
+            .replace("%20", " ")  // Leerzeichen
 
-    // KRITISCH: Google Maps Embed API unterstützt diese Parameter NICHT
-    val unsupportedParams = listOf(
-        "navigation=1", "navigation=true",
-        "controls=1", "controls=true",
-        "zoom=1", "zoom=true",
-        "fullscreen=1", "fullscreen=true",
-        // NEUE: Zusätzliche problematische Parameter
-        "disableDefaultUI=1", "disableDefaultUI=true",
-        "gestureHandling=none", "gestureHandling=greedy",
-        "mapTypeControl=false", "streetViewControl=false"
-    )
-
-    // Entferne alle unsupported Parameter systematisch
-    for (param in unsupportedParams) {
-        // Entferne Parameter am Ende der URL
-        cleanedUrl = cleanedUrl.replace("&$param", "")
-        // Entferne Parameter direkt nach dem ? und ersetze mit nächstem Parameter
-        cleanedUrl = cleanedUrl.replace("?$param&", "?")
-        // Entferne Parameter wenn es der einzige Parameter ist
-        cleanedUrl = cleanedUrl.replace("?$param", "")
-    }
-
-    // NEUE: Bereinige mehrfache & Zeichen
-    cleanedUrl = cleanedUrl.replace("&&+".toRegex(), "&")
-
-    // NEUE: Entferne & am Ende der URL
-    cleanedUrl = cleanedUrl.trimEnd('&')
-
-    // KRITISCH: Stelle sicher dass die URL mit den UNTERSTÜTZTEN Parametern funktioniert
-    // Google Maps Embed API unterstützt nur: location, heading, pitch, fov, key
-
-    println("LocationImageScreen: 🔧 URL bereinigt von: ${url.take(120)}...")
-    println("LocationImageScreen: 🔧 Zu: ${cleanedUrl.take(120)}...")
-
-    return cleanedUrl
-}
-
-// NEUE: Prüfe ob URL gültigen location Parameter hat
-private fun hasValidLocationParameter(url: String): Boolean {
-    try {
-        val locationMatch = Regex("location=([^&]+)").find(url) ?: return false
-        val locationParam = locationMatch.groupValues[1]
-        val decodedLocation = URLDecoder.decode(locationParam, "UTF-8")
-        val coords = decodedLocation.split(",")
-
-        if (coords.size == 2) {
-            val lat = coords[0].toDoubleOrNull()
-            val lng = coords[1].toDoubleOrNull()
-            return lat != null && lng != null &&
-                   lat >= -90.0 && lat <= 90.0 &&
-                   lng >= -180.0 && lng <= 180.0
-        }
-        return false
+        println("LocationImageScreen: 🔄 Einfache Dekodierung: ${url.take(50)} -> ${decoded.take(50)}")
+        decoded
     } catch (e: Exception) {
-        return false
+        println("LocationImageScreen: ⚠️ Dekodierung fehlgeschlagen: ${e.message}")
+        url // Bei Fehlern: Original zurückgeben
     }
 }
+
+// NEUE: Robuste Location Parameter-Prüfung
+private fun checkLocationParameter(url: String): Boolean {
+    return try {
+        // Verschiedene location Parameter-Formate prüfen
+        val patterns = listOf(
+            Regex("location=([0-9.-]+[%2C,][0-9.-]+)"), // Mit Koordinaten
+            Regex("location=([^&]+)") // Beliebiger Wert nach location=
+        )
+
+        for (pattern in patterns) {
+            val match = pattern.find(url)
+            if (match != null) {
+                val locationValue = match.groupValues[1]
+                println("LocationImageScreen: 🎯 Gefundener location Parameter: '$locationValue'")
+
+                // Prüfe ob es leer oder ungültig ist
+                if (locationValue.isNotBlank() &&
+                    !locationValue.startsWith("&") &&
+                    !locationValue.endsWith("=") &&
+                    locationValue != "%2C" &&
+                    locationValue != ",") {
+                    return true
+                }
+            }
+        }
+
+        println("LocationImageScreen: ❌ Kein gültiger location Parameter gefunden in: ${url.take(100)}")
+        false
+    } catch (e: Exception) {
+        println("LocationImageScreen: ❌ Fehler bei location Parameter-Prüfung: ${e.message}")
+        false
+    }
+}
+
+// ENTFERNE: removeUnsupportedEmbedParameters Funktion komplett
+// ENTFERNE: hasValidLocationParameter Funktion (ersetzt durch checkLocationParameter)
 
 // NEUE: Performance-optimierte WebView-Komponente
 @Composable
-private fun OptimizedWebView(
+private fun CleanWebView(
     url: String,
     locationName: String,
     onError: (String) -> Unit,
@@ -820,19 +782,19 @@ private fun OptimizedWebView(
                     loadWithOverviewMode = true
                     useWideViewPort = true
                     setSupportZoom(true)
-                    builtInZoomControls = false
+
                     displayZoomControls = false
                     // KRITISCH: Mixed Content auf ALWAYS_ALLOW für Google Maps
                     mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                     mediaPlaybackRequiresUserGesture = false
-                    allowFileAccess = false
+
                     allowContentAccess = false
                     @Suppress("DEPRECATION")
                     allowUniversalAccessFromFileURLs = false
                     @Suppress("DEPRECATION")
                     allowFileAccessFromFileURLs = false
                     setGeolocationEnabled(false)
-                    setSupportMultipleWindows(false)
+
                     cacheMode = WebSettings.LOAD_DEFAULT
                     // KRITISCH: Korrekter User Agent für Google Maps
                     userAgentString = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36"
@@ -845,20 +807,20 @@ private fun OptimizedWebView(
                     private var errorCount = 0
                     private val maxErrors = 3
                     private var pageStartTime = 0L
+
                     override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
                         return when {
                             url?.startsWith("https://www.google.com/maps") == true -> false
-                            url?.startsWith("https://maps.googleapis.com") == true -> false
                             url?.startsWith("https://maps.gstatic.com") == true -> false
                             url?.startsWith("https://khms") == true -> false
-                            url?.startsWith("https://streetviewpixels") == true -> false
                             url?.contains("google.com") == true -> false
                             else -> {
-                                println("LocationImageScreen: 🚫 Blockiere externe URL: "+(url?.take(50) ?: ""))
+                                println("LocationImageScreen: 🚫 Blockiere externe URL: ${url?.take(50)}")
                                 true
                             }
                         }
                     }
+
                     override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                         super.onPageStarted(view, url, favicon)
                         isWebViewReady = false
@@ -870,6 +832,7 @@ private fun OptimizedWebView(
                             println("LocationImageScreen: 🔄 Lade Street View für $locationName")
                         }
                     }
+
                     override fun onPageFinished(view: WebView?, url: String?) {
                         super.onPageFinished(view, url)
                         if (url?.contains("streetview") == true) {
@@ -882,6 +845,7 @@ private fun OptimizedWebView(
                             }, 4000)
                         }
                     }
+
                     override fun onReceivedError(view: WebView?, errorCode: Int, description: String?, failingUrl: String?) {
                         super.onReceivedError(view, errorCode, description, failingUrl)
                         errorCount++
@@ -890,6 +854,7 @@ private fun OptimizedWebView(
                             onError("Wiederholt WebView Fehler: $description")
                         }
                     }
+
                     override fun onReceivedHttpError(view: WebView?, request: WebResourceRequest?, errorResponse: WebResourceResponse?) {
                         super.onReceivedHttpError(view, request, errorResponse)
                         val statusCode = errorResponse?.statusCode
@@ -903,13 +868,16 @@ private fun OptimizedWebView(
                             requestUrl.contains("streetview") &&
                             requestUrl.contains("google.com/maps/embed") &&
                             !requestUrl.contains("favicon")) {
-                            println("LocationImageScreen: 🔧 HTTP $statusCode für $locationName, wechsle zu Fallback")
+                            println("LocationImageScreen: ��� HTTP $statusCode für $locationName, wechsle zu Fallback")
                             onError("HTTP $statusCode: Street View nicht verfügbar")
                         }
                     }
+
                     override fun onReceivedSslError(view: WebView?, handler: SslErrorHandler?, error: SslError?) {
+                        println("LocationImageScreen: 🔒 SSL Error: ${error?.toString()}")
                         handler?.proceed()
                     }
+
                     private fun performDelayedValidation(webView: WebView, onErrorCallback: (String) -> Unit) {
                         hasPerformedValidation = true
                         validationAttempts++
@@ -919,22 +887,30 @@ private fun OptimizedWebView(
                                 try {
                                     var bodyText = document.body ? document.body.innerText.toLowerCase() : '';
                                     var bodyHtml = document.body ? document.body.innerHTML.toLowerCase() : '';
+                                    
+                                    // Prüfe auf explizite Fehlermeldungen
                                     if (bodyText.includes('invalid request') && bodyText.includes('missing')) {
                                         return 'explicit_error_detected';
                                     }
                                     if (bodyText.includes('rejected') && bodyText.includes('request')) {
                                         return 'request_rejected';
                                     }
+                                    
+                                    // Prüfe auf Street View Erfolgs-Indikatoren
                                     var hasStreetViewIndicators = bodyHtml.includes('streetview') ||
                                                                  bodyHtml.includes('street-view') ||
                                                                  bodyHtml.includes('maps-embed') ||
                                                                  (bodyHtml.includes('google') && bodyHtml.includes('maps'));
+                                    
                                     if (hasStreetViewIndicators) {
                                         return 'streetview_success';
                                     }
+                                    
+                                    // Content vorhanden aber unsicher
                                     if (bodyText.length > 50 || bodyHtml.length > 200) {
                                         return 'content_present_assume_ok';
                                     }
+                                    
                                     return 'no_clear_indicators';
                                 } catch (innerError) {
                                     return 'js_inner_error';
@@ -949,20 +925,25 @@ private fun OptimizedWebView(
                                     onErrorCallback("Google Maps: Request wurde abgelehnt")
                                 }
                                 result?.contains("streetview_success") == true -> {
+                                    println("LocationImageScreen: ✅ Street View erfolgreich validiert")
                                     isWebViewReady = true
                                 }
                                 result?.contains("content_present_assume_ok") == true -> {
+                                    println("LocationImageScreen: ✅ Content vorhanden, nehme als erfolgreich an")
                                     isWebViewReady = true
                                 }
                                 result?.contains("js_") == true -> {
+                                    println("LocationImageScreen: ✅ JavaScript ausgeführt, nehme als erfolgreich an")
                                     isWebViewReady = true
                                 }
                                 else -> {
                                     if (validationAttempts < 2) {
+                                        println("LocationImageScreen: 🔄 Validation unschlüssig, weitere Versuche...")
                                         webView.postDelayed({
                                             performDelayedValidation(webView, onErrorCallback)
                                         }, 3000)
                                     } else {
+                                        println("LocationImageScreen: ✅ Max Validation-Versuche erreicht, nehme als OK an")
                                         isWebViewReady = true
                                     }
                                 }
@@ -970,6 +951,7 @@ private fun OptimizedWebView(
                         }
                     }
                 }
+
                 webChromeClient = object : WebChromeClient() {
                     override fun onProgressChanged(view: WebView?, newProgress: Int) {
                         super.onProgressChanged(view, newProgress)
@@ -978,9 +960,11 @@ private fun OptimizedWebView(
                             isWebViewReady = true
                         }
                     }
+
                     override fun onPermissionRequest(request: PermissionRequest?) {
                         request?.deny()
                     }
+
                     override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
                         val message = consoleMessage?.message() ?: ""
                         if (message.contains("Invalid request", ignoreCase = true) &&
@@ -990,10 +974,12 @@ private fun OptimizedWebView(
                         return true
                     }
                 }
+
                 try {
                     if (url.contains("/maps/embed/v1/")) {
                         // KORRIGIERT: Google Maps Embed API MUSS in iframe geladen werden!
                         println("LocationImageScreen: 🌐 Lade Google Maps Embed in iframe mit optimierten Einstellungen")
+                        println("LocationImageScreen: 🔗 FINALE URL für iframe: $url")
 
                         val html = """
                             <!DOCTYPE html>
@@ -1002,7 +988,6 @@ private fun OptimizedWebView(
                                 <meta charset="UTF-8">
                                 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
                                 <meta http-equiv="X-UA-Compatible" content="IE=edge">
-                                <meta http-equiv="Content-Security-Policy" content="default-src 'self' https://www.google.com https://maps.googleapis.com https://maps.gstatic.com https://khms0.googleapis.com https://khms1.googleapis.com https://khms2.googleapis.com https://khms3.googleapis.com; script-src 'self' 'unsafe-inline' https://www.google.com https://maps.googleapis.com; style-src 'self' 'unsafe-inline' https://www.google.com https://maps.googleapis.com; frame-src https://www.google.com;">
                                 <title>Street View</title>
                                 <style>
                                     * { 
@@ -1073,18 +1058,16 @@ private fun OptimizedWebView(
                                         scrolling="no"
                                         allowfullscreen
                                         loading="eager"
-                                        sandbox="allow-scripts allow-same-origin allow-forms"
-                                        referrerpolicy="no-referrer-when-downgrade"
+                                        sandbox="allow-scripts allow-same-origin allow-forms allow-top-navigation"
+                                        referrerpolicy="origin"
                                         allow="geolocation; fullscreen">
                                     </iframe>
                                 </div>
                                 <script>
-                                    console.log('Street View HTML geladen, iframe wird initialisiert...');
-                                    
                                     var iframe = document.getElementById('streetview-frame');
                                     var loading = document.getElementById('loading');
                                     var loadTimeout;
-                                    
+                        
                                     // Funktion zum Verstecken des Loading-Indikators
                                     function hideLoading() {
                                         if (loading) {
@@ -1097,16 +1080,16 @@ private fun OptimizedWebView(
                                     iframe.onload = function() {
                                         console.log('Street View iframe erfolgreich geladen');
                                         clearTimeout(loadTimeout);
-                                        setTimeout(hideLoading, 1000); // Kurze Verzögerung für bessere UX
+                                        setTimeout(hideLoading, 1000);
                                     };
-                                    
+
                                     // iframe onerror Event
                                     iframe.onerror = function() {
                                         console.log('Street View iframe Fehler beim Laden');
                                         hideLoading();
                                     };
                                     
-                                    // Timeout als Fallback (längerer Timeout für Street View)
+                                    // Timeout als Fallback
                                     loadTimeout = setTimeout(function() {
                                         console.log('Street View Timeout erreicht, verstecke Loading');
                                         hideLoading();
@@ -1115,17 +1098,29 @@ private fun OptimizedWebView(
                                     // Zusätzliche Checks für iframe Content
                                     setTimeout(function() {
                                         try {
-                                            // Prüfe ob iframe geladen hat
                                             if (iframe.contentWindow) {
-                                                console.log('Street View iframe Content Window verfügbar');
                                                 hideLoading();
                                             }
                                         } catch (e) {
-                                            // Cross-origin Fehler sind normal bei Google Maps
                                             console.log('Street View Cross-origin - normal für Google Maps');
                                             hideLoading();
                                         }
                                     }, 3000);
+
+                                    // Überwache iframe für HTTP-Fehler
+                                    iframe.addEventListener('load', function() {
+                                        setTimeout(function() {
+                                            try {
+                                                var iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                                                var bodyText = iframeDoc.body ? iframeDoc.body.innerText.toLowerCase() : '';
+                                                if (bodyText.includes('invalid request') || bodyText.includes('missing')) {
+                                                    console.error('Street View: HTTP 400 - Invalid request detected');
+                                                }
+                                            } catch (e) {
+                                                console.log('Street View Cross-origin - normal für Google Maps');
+                                            }
+                                        }, 2000);
+                                    });
                                 </script>
                             </body>
                             </html>
@@ -1133,8 +1128,7 @@ private fun OptimizedWebView(
 
                         // KRITISCH: loadDataWithBaseURL mit korrekter Base URL für Google Maps
                         loadDataWithBaseURL("https://www.google.com/", html, "text/html", "UTF-8", null)
-
-                        println("LocationImageScreen: 🌐 Google Maps iframe HTML geladen: ${url.take(80)}...")
+                        println("LocationImageScreen: 🌐 Google Maps iframe HTML geladen")
                     } else {
                         val headers = mapOf(
                             "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -1151,4 +1145,15 @@ private fun OptimizedWebView(
         },
         modifier = modifier
     )
+}
+
+// NEUE: Haupt-URL-Validierungsfunktion
+private fun validateCleanUrl(url: String): String {
+    return when {
+        url.isBlank() -> ""
+        url.contains("[object Object]") -> ""
+        url.contains("PLACEHOLDER_API_KEY") -> ""
+        url.contains("undefined") -> ""
+        else -> url.trim()
+    }
 }

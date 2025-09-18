@@ -13,7 +13,7 @@ import javax.inject.Singleton
 class UserRepository @Inject constructor(
     private val apiService: ApiService,
     private val userDao: UserDao
-) : BaseRepository() {
+) {
 
     suspend fun getCurrentUser(): UserEntity? {
         return userDao.getCurrentUser()

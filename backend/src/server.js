@@ -129,6 +129,7 @@ try {
   app.use("/api/auth", require("./routes/auth"));
   app.use("/api/locations", require("./routes/locations"));
   app.use("/api/games", require("./routes/games"));
+  app.use("/api/game", require("./routes/games")); // Alias for Android app compatibility
   app.use("/api/battle-royale", require("./routes/battleRoyale"));
 } catch (error) {
   console.error("Error loading routes:", error.message);
