@@ -822,7 +822,8 @@ private fun OptimizedWebView(
                     setSupportZoom(true)
                     builtInZoomControls = false
                     displayZoomControls = false
-                    mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+                    // KRITISCH: Mixed Content auf ALWAYS_ALLOW für Google Maps
+                    mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                     mediaPlaybackRequiresUserGesture = false
                     allowFileAccess = false
                     allowContentAccess = false
@@ -836,10 +837,9 @@ private fun OptimizedWebView(
                     // KRITISCH: Korrekter User Agent für Google Maps
                     userAgentString = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36"
 
-                    // NEUE: Zusätzliche Einstellungen für Google Maps
+                    // NEUE: Zusätzliche Einstellungen für Google Maps (ohne deprecated Methoden)
+                    @Suppress("DEPRECATION")
                     setRenderPriority(WebSettings.RenderPriority.HIGH)
-                    setAppCacheEnabled(true)
-                    setAppCachePath(context.cacheDir.absolutePath)
                 }
                 webViewClient = object : WebViewClient() {
                     private var errorCount = 0
@@ -992,7 +992,9 @@ private fun OptimizedWebView(
                 }
                 try {
                     if (url.contains("/maps/embed/v1/")) {
-                        // KORRIGIERT: Verbessertes HTML mit korrekten Meta-Tags und Viewport
+                        // KORRIGIERT: Google Maps Embed API MUSS in iframe geladen werden!
+                        println("LocationImageScreen: 🌐 Lade Google Maps Embed in iframe mit optimierten Einstellungen")
+
                         val html = """
                             <!DOCTYPE html>
                             <html lang="de">
@@ -1000,49 +1002,130 @@ private fun OptimizedWebView(
                                 <meta charset="UTF-8">
                                 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
                                 <meta http-equiv="X-UA-Compatible" content="IE=edge">
+                                <meta http-equiv="Content-Security-Policy" content="default-src 'self' https://www.google.com https://maps.googleapis.com https://maps.gstatic.com https://khms0.googleapis.com https://khms1.googleapis.com https://khms2.googleapis.com https://khms3.googleapis.com; script-src 'self' 'unsafe-inline' https://www.google.com https://maps.googleapis.com; style-src 'self' 'unsafe-inline' https://www.google.com https://maps.googleapis.com; frame-src https://www.google.com;">
                                 <title>Street View</title>
                                 <style>
-                                    * { margin: 0; padding: 0; box-sizing: border-box; }
-                                    html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
-                                    #streetview-frame { 
+                                    * { 
+                                        margin: 0; 
+                                        padding: 0; 
+                                        box-sizing: border-box; 
+                                    }
+                                    html, body { 
+                                        width: 100%; 
+                                        height: 100%; 
+                                        overflow: hidden; 
+                                        background: #1a1a1a;
+                                        font-family: Arial, sans-serif;
+                                    }
+                                    #streetview-container {
+                                        position: relative;
                                         width: 100vw; 
-                                        height: 100vh; 
+                                        height: 100vh;
+                                        background: #1a1a1a;
+                                    }
+                                    #streetview-frame { 
+                                        width: 100%; 
+                                        height: 100%; 
                                         border: none; 
                                         display: block;
                                         background: #f0f0f0;
+                                        position: absolute;
+                                        top: 0;
+                                        left: 0;
                                     }
                                     .loading {
                                         position: absolute;
                                         top: 50%;
                                         left: 50%;
                                         transform: translate(-50%, -50%);
-                                        color: #666;
-                                        font-family: Arial, sans-serif;
-                                        z-index: 1;
+                                        color: #fff;
+                                        font-size: 16px;
+                                        z-index: 2;
+                                        text-align: center;
+                                    }
+                                    .loading-spinner {
+                                        width: 40px;
+                                        height: 40px;
+                                        border: 4px solid #444;
+                                        border-top: 4px solid #fff;
+                                        border-radius: 50%;
+                                        animation: spin 1s linear infinite;
+                                        margin: 0 auto 10px;
+                                    }
+                                    @keyframes spin {
+                                        0% { transform: rotate(0deg); }
+                                        100% { transform: rotate(360deg); }
                                     }
                                 </style>
                             </head>
                             <body>
-                                <div class="loading" id="loading">Lade Street View...</div>
-                                <iframe 
-                                    id="streetview-frame"
-                                    src="$url" 
-                                    width="100%" 
-                                    height="100%" 
-                                    frameborder="0" 
-                                    allowfullscreen
-                                    loading="eager"
-                                    referrerpolicy="no-referrer-when-downgrade">
-                                </iframe>
+                                <div id="streetview-container">
+                                    <div class="loading" id="loading">
+                                        <div class="loading-spinner"></div>
+                                        <div>Lade Street View...</div>
+                                    </div>
+                                    <iframe 
+                                        id="streetview-frame"
+                                        src="$url" 
+                                        width="100%" 
+                                        height="100%" 
+                                        frameborder="0" 
+                                        scrolling="no"
+                                        allowfullscreen
+                                        loading="eager"
+                                        sandbox="allow-scripts allow-same-origin allow-forms"
+                                        referrerpolicy="no-referrer-when-downgrade"
+                                        allow="geolocation; fullscreen">
+                                    </iframe>
+                                </div>
                                 <script>
-                                    document.getElementById('streetview-frame').onload = function() {
-                                        document.getElementById('loading').style.display = 'none';
-                                        console.log('Street View iframe geladen');
+                                    console.log('Street View HTML geladen, iframe wird initialisiert...');
+                                    
+                                    var iframe = document.getElementById('streetview-frame');
+                                    var loading = document.getElementById('loading');
+                                    var loadTimeout;
+                                    
+                                    // Funktion zum Verstecken des Loading-Indikators
+                                    function hideLoading() {
+                                        if (loading) {
+                                            loading.style.display = 'none';
+                                            console.log('Loading-Indikator versteckt');
+                                        }
+                                    }
+                                    
+                                    // iframe onload Event
+                                    iframe.onload = function() {
+                                        console.log('Street View iframe erfolgreich geladen');
+                                        clearTimeout(loadTimeout);
+                                        setTimeout(hideLoading, 1000); // Kurze Verzögerung für bessere UX
                                     };
-                                    // Timeout als Fallback
+                                    
+                                    // iframe onerror Event
+                                    iframe.onerror = function() {
+                                        console.log('Street View iframe Fehler beim Laden');
+                                        hideLoading();
+                                    };
+                                    
+                                    // Timeout als Fallback (längerer Timeout für Street View)
+                                    loadTimeout = setTimeout(function() {
+                                        console.log('Street View Timeout erreicht, verstecke Loading');
+                                        hideLoading();
+                                    }, 10000);
+                                    
+                                    // Zusätzliche Checks für iframe Content
                                     setTimeout(function() {
-                                        document.getElementById('loading').style.display = 'none';
-                                    }, 8000);
+                                        try {
+                                            // Prüfe ob iframe geladen hat
+                                            if (iframe.contentWindow) {
+                                                console.log('Street View iframe Content Window verfügbar');
+                                                hideLoading();
+                                            }
+                                        } catch (e) {
+                                            // Cross-origin Fehler sind normal bei Google Maps
+                                            console.log('Street View Cross-origin - normal für Google Maps');
+                                            hideLoading();
+                                        }
+                                    }, 3000);
                                 </script>
                             </body>
                             </html>
@@ -1051,7 +1134,7 @@ private fun OptimizedWebView(
                         // KRITISCH: loadDataWithBaseURL mit korrekter Base URL für Google Maps
                         loadDataWithBaseURL("https://www.google.com/", html, "text/html", "UTF-8", null)
 
-                        println("LocationImageScreen: 🌐 HTML mit verbesserter Struktur geladen")
+                        println("LocationImageScreen: 🌐 Google Maps iframe HTML geladen: ${url.take(80)}...")
                     } else {
                         val headers = mapOf(
                             "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -1064,3 +1147,8 @@ private fun OptimizedWebView(
                 } catch (e: Exception) {
                     onError("URL-Ladefehler: ${e.message}")
                 }
+            }
+        },
+        modifier = modifier
+    )
+}
