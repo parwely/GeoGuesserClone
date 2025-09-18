@@ -28,8 +28,8 @@
 - **API Design:** RESTful + WebSocket
 
 ### Map and StreetView SOlution
--  **Primary** Google Street View Embed Linkns for Street View, Static if First Fails
-- **Alternative**: Mapillary semi 
+-  **Primary** Google Maps SDK and Metadata from localhost server by Googles APIs
+- **Alternative**: Mapillary sem
 - **Fallback**: Custom Bitmap-Weltkarte
 
 ### Image Sources
